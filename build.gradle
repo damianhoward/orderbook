@@ -1,6 +1,6 @@
 // The root holds only what spans the whole repository — repo-wide formatting and the OWASP
 // aggregate; :core and :app each apply kotlin-conventions and declare their own specifics.
 plugins {
-    id 'io.github.damian1000.root-conventions' version '0.4.15'
+    id 'io.github.damian1000.root-conventions' version '0.4.16'
     id 'me.champeau.jmh' version '0.7.3' apply false
 }
