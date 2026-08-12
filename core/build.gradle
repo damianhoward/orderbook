@@ -2,7 +2,7 @@
 // measure it. No web, no Kafka, no entry point; this is the module published for consumers
 // (JitPack builds it from a tag), and its only runtime dependency is the Disruptor.
 plugins {
-    id 'io.github.damian1000.kotlin-conventions'
+    id 'com.damianhoward.kotlin-conventions'
     id 'java-library'
     id 'me.champeau.jmh'
     id 'maven-publish'
