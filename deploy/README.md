@@ -10,27 +10,34 @@ every merge to `main` by [`.github/workflows/deploy.yml`](../.github/workflows/d
    `build` rather than `check`, because `check` does not depend on `jar` — so packaging
    sits outside it, and a gate that cannot see whether packaging works is not gating a
    pipeline whose output is a package.
-2. **Deploy that artifact.** The deploy job downloads the artifact and copies it to the host
-   over SSH, pinning the host key from [`known_hosts.pub`](known_hosts.pub) rather than
-   trusting whatever answers on the address. The release unpacks into
-   `~/releases/orderbook/<commit>` and `~/orderbook` is moved onto it with a symlink rename,
-   so a restart can never see a half-copied install. The version-controlled
-   [`orderbook.service`](orderbook.service) unit syncs only when it differs.
+2. **Ask the box for a release.** The deploy job sends the service name, commit, health port and
+   budgets, with the bundle on stdin, over SSH — pinning the host key from
+   [`known_hosts.pub`](known_hosts.pub) rather than trusting whatever answers on the address. The
+   release unpacks into `/srv/orderbook/releases/<commit>` and `/srv/orderbook/current` is moved
+   onto it with a symlink rename, so a restart can never see a half-copied install.
 3. **Verify, or roll back.** A `/readyz` check gates success. If the new release does not come
-   up, the same remote script flips the symlink back to the previous release and restarts —
-   the decision is made on the box, so a runner that dies mid-deploy cannot leave a broken
+   up, the same script flips the symlink back to the previous release and restarts — the
+   decision is made on the box, so a runner that dies mid-deploy cannot leave a broken
    release serving. Three releases are retained.
 
+That script is not sent from here. It is a root-owned script on the box, kept with the box's
+other privileged configuration, which is what allows the key to be restricted to running it.
+
 Secrets (`DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`) live in GitHub Actions, never in
-the repo. The deploy account needs passwordless sudo to install the unit file and manage the
-service.
+the repo. `DEPLOY_SSH_KEY` is a key of CI's own, not the operator's, and on the box it is pinned
+to a forced command: it can ask for a release and can do nothing else — no shell, no file copy,
+no port forward. The account behind it may run exactly one command as root, `systemctl restart
+orderbook`.
 
 ## Topology
 
 A systemd-managed JVM behind Caddy, on a 1 GB micro VM:
 
-- **[`orderbook.service`](orderbook.service)** runs the `installDist` launcher as a non-root
-  user with `Restart=on-failure` and a capped heap (`-Xmx256m`). Logs go to `journalctl`.
+- **The systemd unit** runs the `installDist` launcher as a non-root user with
+  `Restart=on-failure` and a capped heap (`-Xmx256m`). Logs go to `journalctl`. The unit is not in
+  this repository: a unit file is a request to run anything as anyone, so a deploy account able to
+  install one holds root by another name. It is owned as host configuration and applied by an
+  operator, for the same reason the Caddyfile below is.
   Host-specific config the unit shouldn't hard-code — the Kafka egress bootstrap address and
   the SCRAM-SHA-256 credentials it authenticates with — is read from a root-only
   `EnvironmentFile` on the box, declared optional so that when it is absent the server starts
@@ -46,6 +53,5 @@ The server binds loopback, so it is reachable only through that proxy. Nothing h
 directly.
 
 systemd + Caddy rather than Docker: the Docker daemon is too heavy for the 1 GB box's
-memory budget. The unit here is synced on diff by a deploy and the proxy configuration is applied
-from the infrastructure repository, so the host is reproducible rather than hand-edited either
-way.
+memory budget. Both the unit and the proxy configuration are applied from the infrastructure
+repository, so the host is reproducible rather than hand-edited either way.
