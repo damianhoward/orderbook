@@ -16,7 +16,7 @@ on:
 
 jobs:
   scan:
-    uses: damian1000/.github/.github/workflows/dependency-check.yml@main
+    uses: damianhoward/.github/.github/workflows/dependency-check.yml@main
     secrets: inherit
     with:
       task: ":dependencyCheckAggregate"
