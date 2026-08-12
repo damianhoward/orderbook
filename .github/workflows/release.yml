@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   release:
-    uses: damian1000/.github/.github/workflows/release.yml@main
+    uses: damianhoward/.github/.github/workflows/release.yml@main
     with:
       build-command: clean build
       # Notes only: this repository is deployed from main, and trading-system consumes its core
