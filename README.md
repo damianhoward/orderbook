@@ -1,12 +1,12 @@
 # Order Book
 
-[![CI](https://github.com/damian1000/orderbook/actions/workflows/ci.yml/badge.svg)](https://github.com/damian1000/orderbook/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/damian1000/orderbook/actions/workflows/codeql.yml/badge.svg)](https://github.com/damian1000/orderbook/actions/workflows/codeql.yml)
-[![codecov](https://codecov.io/gh/damian1000/orderbook/graph/badge.svg)](https://codecov.io/gh/damian1000/orderbook)
+[![CI](https://github.com/damianhoward/orderbook/actions/workflows/ci.yml/badge.svg)](https://github.com/damianhoward/orderbook/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/damianhoward/orderbook/actions/workflows/codeql.yml/badge.svg)](https://github.com/damianhoward/orderbook/actions/workflows/codeql.yml)
+[![codecov](https://codecov.io/gh/damianhoward/orderbook/graph/badge.svg)](https://codecov.io/gh/damianhoward/orderbook)
 
 A small **limit order book** and **price-time-priority matching engine** in Kotlin. Add / modify / remove orders, query the book by side and level, preserving time priority across modifications — then submit crossing orders and watch them match. The book is single-threaded by design; `MarketSession` owns it on one writer thread and serves concurrent callers over a ring buffer.
 
-**▶ Try it live:** https://orderbook.damianhoward.com — pick a real instrument (or type any ticker), submit an order, and watch it match resting liquidity seeded around that instrument's actual last price, printing to the trade tape. Real quotes come from [`market-data`](https://github.com/damian1000/market-data).
+**▶ Try it live:** https://orderbook.damianhoward.com — pick a real instrument (or type any ticker), submit an order, and watch it match resting liquidity seeded around that instrument's actual last price, printing to the trade tape. Real quotes come from [`market-data`](https://github.com/damianhoward/market-data).
 
 ## Problem
 

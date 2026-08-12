@@ -8,12 +8,12 @@ plugins {
     id 'me.champeau.jmh' // MarketSessionBenchmark lives here: it measures submit() with the egress attached
 }
 
-group = 'io.github.damian1000'
+group = 'com.damianhoward'
 version = '1.0.0'
 
 application {
     applicationName = 'orderbook'
-    mainClass = 'io.github.damian1000.orderbook.web.WebServerKt'
+    mainClass = 'com.damianhoward.orderbook.web.WebServerKt'
 }
 
 repositories {
