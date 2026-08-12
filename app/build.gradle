@@ -3,7 +3,7 @@
 // package lives here, not in :core, so the published library carries no kafka-clients
 // dependency — consumers of the egress topics parse the documented JSON schema instead.
 plugins {
-    id 'io.github.damian1000.kotlin-conventions'
+    id 'com.damianhoward.kotlin-conventions'
     id 'application'
     id 'me.champeau.jmh' // MarketSessionBenchmark lives here: it measures submit() with the egress attached
 }
@@ -23,7 +23,7 @@ repositories {
 dependencies {
     implementation project(':core')
     // Real instrument quotes to seed and label the live book — see QuoteSeed.
-    implementation 'com.github.damian1000:market-data:v1.1.8'
+    implementation 'com.github.damianhoward:market-data:v1.1.8'
     // Egress only — Kafka attaches at the edge (KafkaMarketEgress), never the match path.
     implementation deps.kafka.clients
     // kafka-clients logs via slf4j; a binding routes producer warnings to stderr -> journalctl.
