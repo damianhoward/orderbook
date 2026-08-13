@@ -26,6 +26,7 @@ import com.damianhoward.orderbook.model.Side
 class Readiness(
     private val selfCheck: () -> Unit,
     private val egress: EgressMetrics? = null,
+    private val process: ProcessMetrics = ProcessMetrics(),
 ) {
     data class Probe(
         val ready: Boolean,
@@ -149,6 +150,10 @@ class Readiness(
                 it.lost,
             )
         }
+
+        // Appended, not interleaved: these are process facts rather than readiness conditions, and
+        // keeping them in their own block is what stops one being mistaken for the other.
+        out.append(process.render())
 
         return out.toString()
     }
