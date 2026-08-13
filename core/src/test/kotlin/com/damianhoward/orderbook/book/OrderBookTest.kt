@@ -230,6 +230,70 @@ class OrderBookTest {
     }
 
     @Test
+    fun modifyMovesTheLevelTotalInBothDirections() {
+        // The level total is maintained rather than summed on demand, and a modify mutates the
+        // order in place so it keeps its queue position — which means the total has to be moved
+        // separately. Nothing about the order itself looks wrong when that is missed; only the
+        // depth does. Setup already grows one, so this is the shrink and the second move.
+        assertEquals(12L, orderBook.getTotalSize(Side.OFFER, 1), "8 + 4 to begin with")
+
+        orderBook.modifyOrder(1L, 3)
+        assertEquals(7L, orderBook.getTotalSize(Side.OFFER, 1), "3 + 4 after shrinking")
+
+        orderBook.modifyOrder(1L, 20)
+        assertEquals(24L, orderBook.getTotalSize(Side.OFFER, 1), "20 + 4 after growing again")
+    }
+
+    @Test
+    fun removingFromTheMiddleOfALevelKeepsTheRestInTimeOrder() {
+        orderBook.addOrder(Order(10L, price("19"), Side.OFFER, 5))
+        assertEquals(listOf(1L, 2L, 10L), restingIdsAt(Side.OFFER, price("19")))
+
+        orderBook.removeOrder(2L)
+
+        assertEquals(listOf(1L, 10L), restingIdsAt(Side.OFFER, price("19")), "arrival order survives the gap")
+        assertEquals(13L, orderBook.getTotalSize(Side.OFFER, 1), "8 + 5")
+    }
+
+    @Test
+    fun removingTheHeadAndTheTailBothRelinkTheLevel() {
+        orderBook.addOrder(Order(10L, price("19"), Side.OFFER, 5))
+
+        orderBook.removeOrder(1L) // head
+        assertEquals(listOf(2L, 10L), restingIdsAt(Side.OFFER, price("19")))
+        assertEquals(9L, orderBook.getTotalSize(Side.OFFER, 1))
+
+        orderBook.removeOrder(10L) // tail
+        assertEquals(listOf(2L), restingIdsAt(Side.OFFER, price("19")))
+        assertEquals(4L, orderBook.getTotalSize(Side.OFFER, 1))
+    }
+
+    @Test
+    fun emptyingALevelRemovesThePriceRatherThanLeavingAZeroRung() {
+        orderBook.removeOrder(1L)
+        orderBook.removeOrder(2L)
+
+        assertEquals(price("21"), orderBook.getPrice(Side.OFFER, 1), "19 is gone, 21 is the best offer")
+        assertEquals(17L, orderBook.getTotalSize(Side.OFFER, 1))
+    }
+
+    @Test
+    fun replacingAnIdAtTheSamePriceMovesTheTotalDownThenUp() {
+        // addOrder's duplicate-id path drops the resting order first. Both halves touch the same
+        // level's total, so a replacement that only added would inflate depth permanently.
+        orderBook.addOrder(Order(1L, price("19"), Side.OFFER, 30))
+
+        assertEquals(34L, orderBook.getTotalSize(Side.OFFER, 1), "30 + 4, not 8 + 4 + 30")
+        assertEquals(listOf(2L, 1L), restingIdsAt(Side.OFFER, price("19")), "the replacement loses its old priority")
+    }
+
+    /** The orders resting at one price, in queue order — depth is per level, `getOrders` is per side. */
+    private fun restingIdsAt(
+        side: Side,
+        at: Price,
+    ): List<Long> = orderBook.getOrders(side).filter { it.price == at }.map { it.id }
+
+    @Test
     fun containsFollowsTheOrderThroughRemoval() {
         val id = 42L
         assertFalse(orderBook.contains(id))
