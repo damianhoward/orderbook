@@ -101,7 +101,9 @@ class ReadinessTest {
             body
                 .lineSequence()
                 .filter { it.isNotBlank() && !it.startsWith("#") }
-                .map { it.substringBefore(' ') }
+                // Label set stripped before the value is: a GC name contains spaces, so splitting
+                // on the first one takes half a label with it.
+                .map { it.substringBefore('{').substringBefore(' ') }
                 .toList()
         assertTrue(names.isNotEmpty(), body)
         for (name in names) {
