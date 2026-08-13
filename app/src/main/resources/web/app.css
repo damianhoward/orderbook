@@ -490,6 +490,16 @@ a:hover {
   color: var(--ask);
 }
 
+/* Scope of the public book, stated on the page rather than left to be inferred. */
+.scope-note {
+  margin: 12px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--rule);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink-4);
+}
+
 /* ===== Trade tape ===================================================== */
 .tape {
   flex: 1;

@@ -80,6 +80,8 @@ val fills = engine.submit(Order(2L, Price.of("101"), Side.BID, 8))
 
 Scope: plain limit orders (cross, then rest the remainder). Richer types — market, IOC/FOK, stop, iceberg — build on this. The [live web front end](https://orderbook.damianhoward.com) wraps the engine in a dependency-free JDK `HttpServer`, pushing book and tape updates to the browser over Server-Sent Events.
 
+The public site is open and unauthenticated. Order ids come from a process-local counter rather than a client, there is no account for one to belong to, and so there is no cancel — `OrderBook.removeOrder` and `modifyOrder` exist as engine primitives with no route reaching them. Each symbol's book is shared by everyone viewing it and is discarded on restart or on LRU eviction from `SessionRegistry`. An order lifecycle with an owner on it — client order id, cancel and replace, idempotency on a repeated command — is a seam this design leaves open, not a guarantee it makes.
+
 ## Kafka egress
 
 The match loop never touches Kafka. `MarketSession` runs on one writer thread; each fill, each accepted command, and each depth change crosses a seam (`FillListener` / `CommandListener` / `DepthListener`) that costs the writer a bounded-queue enqueue, and a dedicated egress thread (`KafkaMarketEgress`) drains into one `KafkaProducer` across three topics.
