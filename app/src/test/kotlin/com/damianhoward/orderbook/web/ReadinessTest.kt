@@ -58,4 +58,66 @@ class ReadinessTest {
         assertFalse(probe.ready)
         assertTrue(probe.json.contains(""""lost":2"""))
     }
+
+    @Test
+    fun `metrics renders the same verdict as the probe`() {
+        // The reason both endpoints render one snapshot: a service that computes "unhealthy" twice
+        // can report it twice differently.
+        val ready = Readiness({})
+        assertTrue(ready.probe().ready)
+        assertTrue(ready.metrics().contains("orderbook_ready 1"), ready.metrics())
+
+        val broken = Readiness({ throw IllegalStateException("boom") })
+        assertFalse(broken.probe().ready)
+        assertTrue(broken.metrics().contains("orderbook_ready 0"), broken.metrics())
+    }
+
+    @Test
+    fun `metrics publishes the egress counters when a producer is configured`() {
+        val metrics = Readiness({}, Counters(published = 12, failed = 1, dropped = 3, lost = 4)).metrics()
+        assertTrue(metrics.contains("orderbook_egress_enabled 1"), metrics)
+        assertTrue(metrics.contains("orderbook_egress_published_total 12"), metrics)
+        assertTrue(metrics.contains("orderbook_egress_failed_total 1"), metrics)
+        assertTrue(metrics.contains("orderbook_egress_dropped_total 3"), metrics)
+        assertTrue(metrics.contains("orderbook_egress_lost_total 4"), metrics)
+    }
+
+    @Test
+    fun `metrics omits the counters rather than publishing zeroes when no producer is configured`() {
+        // Same distinction the JSON body draws, and the one a rate() would otherwise erase: a
+        // counter pinned at zero reads as a working producer that has shipped nothing.
+        val metrics = Readiness({}).metrics()
+        assertTrue(metrics.contains("orderbook_egress_enabled 0"), metrics)
+        assertFalse(metrics.contains("orderbook_egress_published_total"), metrics)
+        assertFalse(metrics.contains("orderbook_egress_lost_total"), metrics)
+    }
+
+    @Test
+    fun `every published series carries its HELP and TYPE`() {
+        // Exposition-format validity, checked here rather than assumed: a series without a TYPE is
+        // parsed as untyped, so a counter silently loses rate() and increase().
+        val body = Readiness({}, Counters(published = 1)).metrics()
+        val names =
+            body
+                .lineSequence()
+                .filter { it.isNotBlank() && !it.startsWith("#") }
+                .map { it.substringBefore(' ') }
+                .toList()
+        assertTrue(names.isNotEmpty(), body)
+        for (name in names) {
+            assertTrue(body.contains("# HELP $name "), "$name has no HELP\n$body")
+            assertTrue(body.contains("# TYPE $name "), "$name has no TYPE\n$body")
+        }
+    }
+
+    @Test
+    fun `the counters are named for what Prometheus expects a counter to be called`() {
+        // The _total suffix is the convention every dashboard and alert expression assumes, and
+        // renaming a published series later costs whatever history was already collected.
+        val body = Readiness({}, Counters(published = 1)).metrics()
+        for (line in body.lineSequence().filter { it.startsWith("# TYPE ") }) {
+            val (name, type) = line.removePrefix("# TYPE ").split(' ')
+            if (type == "counter") assertTrue(name.endsWith("_total"), "$name is a counter without _total")
+        }
+    }
 }

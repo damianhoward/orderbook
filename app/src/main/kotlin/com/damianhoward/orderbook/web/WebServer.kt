@@ -38,8 +38,8 @@ import java.util.concurrent.TimeUnit
  *
  * `/api/symbols` lists the curated picker options; `/api/{symbol}/quote` reads the [quotes] cache
  * a background refresh keeps warm (see [main]) — the displayed reference price, not the book.
- * `/metrics` publishes the Kafka egress counters (see [EgressMetrics]), or `enabled:false` when no
- * egress is wired.
+ * `/metrics` publishes the Kafka egress counters (see [EgressMetrics]) in Prometheus text format,
+ * rendered from the same [Readiness] snapshot `/readyz` answers from.
  *
  * Reads are GET (HEAD answers identically, minus the body); `/api/{symbol}/order` mutates the
  * book, so it is POST-only — a GET that changes
@@ -107,7 +107,7 @@ class WebServer(
             when {
                 path == "/healthz" -> get(exchange) { respond(exchange, 200, "text/plain", "ok") }
                 path == "/readyz" -> get(exchange) { ready(exchange) }
-                path == "/metrics" -> get(exchange) { respond(exchange, 200, "application/json", metricsJson()) }
+                path == "/metrics" -> get(exchange) { respond(exchange, 200, PROMETHEUS_CONTENT_TYPE, readiness.metrics()) }
                 path == "/" -> get(exchange) { respond(exchange, 200, "text/html; charset=utf-8", assets.indexHtml) }
                 path == "/app.css" -> get(exchange) { respond(exchange, 200, "text/css; charset=utf-8", assets.appCss) }
                 path == "/app.js" -> get(exchange) { respond(exchange, 200, "text/javascript; charset=utf-8", assets.appJs) }
@@ -267,14 +267,6 @@ class WebServer(
         respond(exchange, if (probe.ready) 200 else 503, "application/json", probe.json)
     }
 
-    // The egress is optional (no producer unless Kafka is configured), so the counters are absent
-    // rather than a misleading zero when it isn't running.
-    private fun metricsJson(): String =
-        egressMetrics?.let {
-            """{"egress":{"enabled":true,"published":${it.published},"failed":${it.failed},""" +
-                """"dropped":${it.dropped},"lost":${it.lost}}}"""
-        } ?: """{"egress":{"enabled":false}}"""
-
     private fun jsonString(s: String): String = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
     private fun respond(
@@ -298,6 +290,11 @@ class WebServer(
 
     companion object {
         private val API_PATH = Regex("^/api/([^/]+)/(state|order|stream|quote)$")
+
+        // The version parameter is part of the Prometheus exposition content type, not decoration:
+        // a collector reads it to decide which parser to use, and omitting it makes the endpoint
+        // depend on the collector guessing right from the body.
+        private const val PROMETHEUS_CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8"
     }
 }
 

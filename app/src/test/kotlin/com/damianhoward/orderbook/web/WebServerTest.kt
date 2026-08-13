@@ -360,11 +360,14 @@ class WebServerTest {
     }
 
     @Test
-    fun `metrics reports egress disabled when no egress is wired`() {
+    fun `metrics serves the Prometheus content type a collector parses on`() {
         val response = request("GET", "/metrics")
         assertEquals(200, response.statusCode())
-        assertEquals("application/json", response.headers().firstValue("Content-Type").get())
-        assertTrue(response.body().contains(""""enabled":false"""), response.body())
+        assertEquals(
+            "text/plain; version=0.0.4; charset=utf-8",
+            response.headers().firstValue("Content-Type").get(),
+        )
+        assertTrue(response.body().contains("orderbook_egress_enabled 0"), response.body())
     }
 
     @Test
@@ -386,11 +389,11 @@ class WebServerTest {
                 )
             assertEquals(200, response.statusCode())
             val body = response.body()
-            assertTrue(body.contains(""""enabled":true"""), body)
-            assertTrue(body.contains(""""published":42"""), body)
-            assertTrue(body.contains(""""failed":2"""), body)
-            assertTrue(body.contains(""""dropped":3"""), body)
-            assertTrue(body.contains(""""lost":1"""), body)
+            assertTrue(body.contains("orderbook_egress_enabled 1"), body)
+            assertTrue(body.contains("orderbook_egress_published_total 42"), body)
+            assertTrue(body.contains("orderbook_egress_failed_total 2"), body)
+            assertTrue(body.contains("orderbook_egress_dropped_total 3"), body)
+            assertTrue(body.contains("orderbook_egress_lost_total 1"), body)
         } finally {
             server.stop()
         }
