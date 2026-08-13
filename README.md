@@ -25,10 +25,11 @@ Sides: `Side.BID` (buy) and `Side.OFFER` (sell), with `'B'` / `'O'` retained as 
 
 - **Prices are integer ticks.** `Price` is a `@JvmInline value class` over a scaled `Long` (`SCALE = 8` decimal places). Scaled integers keep prices exact — no binary floating-point drift, so two logically equal prices always share a map key — and make comparison a primitive `Long` op. `BigDecimal` is touched only when parsing or formatting a decimal string, never on the matching path.
 - **`OrderBook`** holds the data structure and algorithms, with no concurrency control of its own:
-  - **`buyOrders`**: `TreeMap<Price, ArrayDeque<Order>>`, reverse ordering — highest bid first.
-  - **`sellOrders`**: `TreeMap<Price, ArrayDeque<Order>>`, natural ordering — lowest offer first.
-  - **`ordersMap`**: `HashMap<Long, Order>` for O(1) lookup by id (needed for remove / modify).
-  - Per-price queues are `ArrayDeque<Order>` — contiguous and cache-friendly, with `addLast` = arrival order = time priority and the head the next to fill.
+  - **`buyOrders`**: `TreeMap<Price, Level>`, reverse ordering — highest bid first.
+  - **`sellOrders`**: `TreeMap<Price, Level>`, natural ordering — lowest offer first.
+  - **`ordersMap`**: `HashMap<Long, Node>` for O(1) lookup by id (needed for remove / modify).
+  - A **`Level`** is a doubly-linked list of resting orders plus a running `totalSize`. `addLast` = arrival order = time priority, the head is the next to fill, and an order anywhere in the queue unlinks in O(1). The links live on a private `Node` rather than on `Order`, because `Order` is published and `snapshot()` hands out detached copies — a copy carrying queue links would be a live pointer into the book escaping through a value object.
+  - `totalSize` is maintained on every mutation instead of summed on demand, because depth renders on each book change across every level. Every path that changes a resting size moves it, `modifyOrder` included.
 - **One thread owns the book.** `MarketSession` runs every operation on a single writer thread and callers reach it over an LMAX Disruptor ring buffer, so no lock guards the data structures. See [Concurrency](#concurrency).
 - **Time priority preserved on modify**: a size change mutates the resting order **in place** (the `ordersMap` and the queue hold the same `Order`), so it keeps its queue position rather than moving to the tail. This is a simplification: real venues keep queue priority on a size _decrease_ but send a size _increase_ to the back of the queue; here any size change retains its place.
 - **Duplicate order ids are rejected at the matcher.** An id names live liquidity, so reusing one has no safe reading: replacing the resting order silently cancels size its owner still believes is working, and a later fill reported against that id is ambiguous between the two orders. `MatchingEngine.submit` checks `OrderBook.contains` before printing any fill and throws `DuplicateOrderIdException`, so a rejected submit leaves the book untouched rather than half-matched. An id becomes free again once nothing rests under it. `addOrder` itself stays a storage primitive and still replaces (so duplicate ids never leave stale orders at old price levels) — callers admitting client-supplied ids guard with `contains`.
@@ -37,14 +38,14 @@ Sides: `Side.BID` (buy) and `Side.OFFER` (sell), with `'B'` / `'O'` retained as 
 
 | Operation                   | Cost                                                     | Notes                                                                                                              |
 | --------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `addOrder`                  | **O(log P)**                                             | `P` = distinct price levels on that side; replacing an existing id also removes its old queue entry                |
-| `removeOrder`               | **O(log P + N_p)**                                       | id-lookup O(1); removing from the `ArrayDeque` is O(N) at that price level                                         |
-| `modifyOrder`               | **O(1)**                                                 | id-lookup O(1); the map and queue share the `Order`, so the size mutates in place — no price-level scan            |
+| `addOrder`                  | **O(log P)**                                             | `P` = distinct price levels on that side; replacing an existing id also unlinks its old node                       |
+| `removeOrder`               | **O(log P)**                                             | id-lookup O(1); the node unlinks in O(1), so only the price-level lookup costs anything                            |
+| `modifyOrder`               | **O(1)**                                                 | id-lookup O(1); the size mutates in place, keeping queue position, and the level's total moves by the delta        |
 | `getPrice(side, level)`     | **O(log P)** for level 1, otherwise **O(log P + level)** | `TreeMap.firstKey()` walks the tree to the leftmost node for the best price; higher levels iterate keys from there |
-| `getTotalSize(side, level)` | **O(level + N_p)**                                       | sums the `ArrayDeque` at that level                                                                                |
+| `getTotalSize(side, level)` | **O(level)**                                             | reads the level's maintained total; no per-call sum                                                                |
 | `getOrders(side)`           | **O(P + N)**                                             | walks all per-price queues                                                                                         |
 
-The remove cost could be O(log P) instead of O(log P + N_p) by tracking each order's position in its `ArrayDeque` with an intrusive index map. Trade-off is more bookkeeping for a rarely-hot path.
+`removeOrder` and `getTotalSize` were **O(log P + N_p)** and **O(level + N_p)** until v3.0.1, when the per-price `ArrayDeque` became a linked level with a running total. `ArrayDeque` cannot remove from the middle, so cancelling scanned the level — and `removeIf` does not even stop at the match. See [Benchmarks](#benchmarks) for what that cost.
 
 ## Concurrency
 
@@ -62,7 +63,7 @@ On the caller's side the wait is a bounded spin, then a park, for the same reaso
 ## Design decisions
 
 - **Prices are scaled `Long` ticks, not `BigDecimal`.** `BigDecimal` looks like the safe default — arbitrary precision, exact decimal arithmetic — but it's wrong for a hot path: every operation allocates, `compareTo`/`hashCode` walk variable-length internal state, and two numerically-equal `BigDecimal`s with different scale (`1.10` vs `1.100`) aren't `.equals()`-equal, which is a landmine for a map key. `Price`'s scaled `Long` (`SCALE = 8`) is a primitive comparison and an inline value class costs nothing beyond the `Long` itself; equal prices are always bit-identical. `BigDecimal` still exists exactly once, at the string parse/format boundary (`Price.of`, `toString`) — never on the matching path.
-- **Book storage is `TreeMap<Price, ArrayDeque<Order>>`, not `ConcurrentHashMap` or an array.** A hash map is rejected outright, not just deprioritised: `getPrice(side, 1)` needs the _best_ price, and a hash map has no ordering, so you'd need a full scan or a parallel sorted index — at which point you've built a worse tree by hand. An array ladder indexed by tick offset is the real alternative, and it buys O(1) best-price access; it was measured and not kept, because it needs a tick size and a price band fixed at construction, and this book's price range is unbounded and sparse. A wide sparse band also makes `getOrders` and deep levels slower than the tree, not faster. Revisit it if a bounded band and best-price tail latency ever matter more than generality.
+- **Book storage is `TreeMap<Price, Level>`, not `ConcurrentHashMap` or an array.** A hash map is rejected outright, not just deprioritised: `getPrice(side, 1)` needs the _best_ price, and a hash map has no ordering, so you'd need a full scan or a parallel sorted index — at which point you've built a worse tree by hand. An array ladder indexed by tick offset is the real alternative, and it buys O(1) best-price access; it was measured and not kept, because it needs a tick size and a price band fixed at construction, and this book's price range is unbounded and sparse. A wide sparse band also makes `getOrders` and deep levels slower than the tree, not faster. Revisit it if a bounded band and best-price tail latency ever matter more than generality.
 - **One writer over a ring buffer, chosen by measurement.** Three ways to serialise access were benchmarked against this book: a read/write lock, a single writer fed by a blocking queue, and a single writer fed by a Disruptor ring buffer. The blocking queue never beat the lock — it relocates locking rather than removing it. The ring buffer did, by roughly 1.5× on read-heavy and ~6× on write-heavy contended workloads, because serialising through one thread with no park and no lock beats a read/write lock's cross-core contention even on reads. Uncontended it loses: the hand-off costs more than a near-free read lock. Contention is the regime a matching engine runs in, so the ring buffer ships and the other two are gone rather than kept as alternatives.
 
 ## Matching engine
@@ -173,29 +174,33 @@ The wait strategy is a separate choice from the mechanism, and the deployed defa
 
 ### Book operations, single-threaded (average time per op)
 
-3×2s warmup + 5×2s measurement, single fork, against a bare book with no session around it.
+`OrderBookOpsBenchmark`, 3×2s warmup + 5×2s measurement, single fork, against a bare book of 10,000 orders across 50 price levels with no session around it.
 
-| Operation                               |   Avg time |
-| --------------------------------------- | ---------: |
-| `getPrice` best bid, level 1            |  **16 ns** |
-| `getPrice` best offer, level 1          |  **18 ns** |
-| `getTotalSize` at level 5               | **312 ns** |
-| `modifyOrder` (existing id, same price) | **295 ns** |
-| `addOrder` + `removeOrder` pair         | **493 ns** |
+| Operation                                       |  Avg time | alloc/op |
+| ----------------------------------------------- | --------: | -------: |
+| `getPrice` best offer, level 1                  |  **3 ns** |      0 B |
+| `getTotalSize` at level 5                       | **11 ns** |      0 B |
+| `getPrice` best bid, level 1                    | **13 ns** |      0 B |
+| `modifyOrder` ×2 (size down, then back)         | **20 ns** |      0 B |
+| `addOrder` + `removeOrder` at a populated price | **58 ns** |    168 B |
 
-- Best-price lookup is ~16 ns. `TreeMap.firstKey()` is **O(log P)** — it walks the tree's left spine and the result isn't cached — but with ~50 price levels that's only a handful of pointer hops, so it measures effectively flat. Moving price from `Double` to a `Price(Long)` value class did not regress it.
-- The add/remove pair under ~500 ns is a steady-state number — book size is stationary across the window. (A standalone `addOrder` row is omitted: the book grows unboundedly inside the measurement window, so its average mixes many book sizes.)
+- **`getTotalSize` was 312 ns before v3.0.1** and is 11 ns now. It used to sum the ~200 orders resting at that price on every call; it now reads the level's maintained total. Depth renders on every book change across every level, so this is the operation the running total was for.
+- **The add/remove pair was 493 ns** and is 58 ns. The order is added at the tail of a populated level, which is precisely where `ArrayDeque.removeIf` had to scan the whole level to find it. Its 168 B/op is the `Order` and its queue node — the one row here that allocates, because it is the one that creates something.
+- Best-price lookup is a handful of pointer hops. `TreeMap.firstKey()` is **O(log P)** and uncached, but at ~50 levels that measures effectively flat. The bid/offer asymmetry (13 ns against 3 ns) is consistent across runs and most likely the reverse-order `Comparator` on the bid map against the offer map's natural ordering, which the JIT can inline; it has not been proven, so treat it as an observation rather than a finding.
+- A standalone `addOrder` row is omitted: the book grows unboundedly inside the measurement window, so its average would mix many book sizes. Every method here leaves the book as it found it.
 
 ### Submission latency and allocation
 
 End-to-end `MatchingEngine.submit()` — the path the live site runs — measured in JMH `SampleTime` (the µs-scale regime where the sampling timer is meaningful; the sub-µs raw-book ops above stay `AverageTime`, since ~25 ns of `nanoTime` overhead would swamp a ~16 ns lookup). The `gc` profiler reports allocation per operation.
 
-| `submit()` (10k orders, 50 levels) |    p50 |    p90 |    p99 |   p99.9 |  alloc/op |
-| ---------------------------------- | -----: | -----: | -----: | ------: | --------: |
-| marketable (fills the top of book) | 800 ns | 900 ns | 1.1 µs |  ~11 µs | **401 B** |
-| passive (rests on the book)        | 100 ns | 200 ns | 300 ns | ~2.7 µs | **384 B** |
+| `submit()` (10k orders, 50 levels) |    p50 |    p90 |    p99 |  p99.9 |  alloc/op |
+| ---------------------------------- | -----: | -----: | -----: | -----: | --------: |
+| marketable (fills the top of book) | 100 ns | 200 ns | 400 ns | 1.4 µs | **360 B** |
+| passive (rests on the book)        | 100 ns | 200 ns | 400 ns | 800 ns | **328 B** |
 
-The hot path is near-allocation-free by design: the matcher peeks the top of book in **O(log P)** (`bestResting`) rather than materialising the side, a partial fill decrements the resting order's remaining size **in place** rather than replacing it, and the per-price queues are cache-friendly `ArrayDeque`s. The few hundred bytes per submit are the incoming order, the detached snapshot handed back to the caller, and — when it crosses — the emitted `Trade`. The p99.9 tail is occasional GC / JIT / safepoint activity, not the algorithm.
+The hot path is near-allocation-free by design: the matcher peeks the top of book in **O(log P)** (`bestResting`) rather than materialising the side, a partial fill decrements the resting order's remaining size **in place** rather than replacing it, and a filled order unlinks from its level in O(1). The few hundred bytes per submit are the incoming order, the detached snapshot handed back to the caller, and — when it crosses — the emitted `Trade`. The p99.9 tail is occasional GC / JIT / safepoint activity, not the algorithm.
+
+**What v3.0.1 changed, and why only one row moved.** Before it, a level was an `ArrayDeque` and cancelling used `removeIf`, which scans the whole level and does not stop at the match. The marketable path fills a resting order at the top of book — a level holding ~200 orders in this fixture — so every submit walked all 200 and allocated an iterator to do it: **avg 1.319 → 0.164 µs/op**, p99 3.1 → 0.4 µs, p99.9 19.8 → 1.4 µs. The passive path rests and cancels at a _sparse_ price, so it had almost nothing to scan; its latency is unchanged and its whole gain is the iterator that `removeIf` no longer allocates (408 → 328 B/op). An improvement that appears on one path and not the other is worth more scepticism than one that appears everywhere, which is why the asymmetry is stated rather than averaged away.
 
 An array ladder indexed by tick offset was measured against the `TreeMap` on the same population and came out statistically indistinguishable: `TreeMap.firstKey()` walks only ~6 nodes (`log2 50`) at this depth, already too cheap for an O(1) pointer lookup to beat measurably. It needed a tick size and price band fixed at construction to buy that, so it was not kept — see [Design decisions](#design-decisions).
 
