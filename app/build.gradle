@@ -23,7 +23,7 @@ repositories {
 dependencies {
     implementation project(':core')
     // Real instrument quotes to seed and label the live book — see QuoteSeed.
-    implementation 'com.github.damianhoward:market-data:v2.0.0'
+    implementation 'com.github.damianhoward:market-data:v2.0.1'
     // Egress only — Kafka attaches at the edge (KafkaMarketEgress), never the match path.
     implementation deps.kafka.clients
     // kafka-clients logs via slf4j; a binding routes producer warnings to stderr -> journalctl.
