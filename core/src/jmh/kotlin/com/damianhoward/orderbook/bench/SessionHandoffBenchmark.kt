@@ -3,6 +3,7 @@ package com.damianhoward.orderbook.bench
 import com.damianhoward.orderbook.market.MarketSession
 import com.damianhoward.orderbook.market.SeedLiquidity
 import com.damianhoward.orderbook.market.SeedOrder
+import com.damianhoward.orderbook.model.Owner
 import com.damianhoward.orderbook.model.Price
 import com.damianhoward.orderbook.model.Side
 import com.lmax.disruptor.BlockingWaitStrategy
@@ -37,6 +38,10 @@ import java.util.concurrent.TimeUnit
 @OutputTimeUnit(TimeUnit.SECONDS)
 @Threads(8)
 open class SessionHandoffBenchmark {
+    // Distinct from Owner.HOUSE, which owns the seeded ladder: an order from the house would be
+    // cancelled by self-match prevention rather than matching, which would measure the wrong path.
+    private val bench = Owner("bench")
+
     @Param("blocking", "busy-spin")
     var waitStrategy: String = ""
 
@@ -73,13 +78,13 @@ open class SessionHandoffBenchmark {
     /** Marketable submit: hand-off, then a match against the resting ladder, then a snapshot. */
     @Benchmark
     fun submitCrossing(bh: Blackhole) {
-        bh.consume(session.submit(Side.BID, crossingBid, RESTING_SIZE))
+        bh.consume(session.submit(Side.BID, crossingBid, RESTING_SIZE, bench))
     }
 
     /** Passive submit: hand-off and a snapshot, with no fill loop — isolates the hand-off's share. */
     @Benchmark
     fun submitResting(bh: Blackhole) {
-        bh.consume(session.submit(Side.BID, restingBid, RESTING_SIZE))
+        bh.consume(session.submit(Side.BID, restingBid, RESTING_SIZE, bench))
     }
 
     /** Read-only command: the cheapest thing the ring buffer carries, so the closest to its floor. */

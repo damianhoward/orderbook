@@ -2,6 +2,7 @@ package com.damianhoward.orderbook.web
 
 import com.damianhoward.orderbook.kafka.EgressMetrics
 import com.damianhoward.orderbook.market.MarketSession
+import com.damianhoward.orderbook.model.Owner
 import com.damianhoward.orderbook.model.Side
 
 /**
@@ -181,7 +182,13 @@ class Readiness(
                     MarketSession().use { session ->
                         val book = session.snapshot()
                         check(book.bids.isNotEmpty() && book.asks.isNotEmpty()) { "seeded book has an empty side" }
-                        check(session.submit(Side.BID, book.asks.first().price, 1).matched > 0) {
+                        // A party of its own, and it must stay one. The liquidity this probe is
+                        // about to lift is Owner.HOUSE, and self-match prevention will not fill an
+                        // order against another of the same owner — so probing as the house would
+                        // cancel the ask instead of trading with it, and this check would report a
+                        // broken matching engine on a working one.
+                        val probe = Owner("readiness-probe")
+                        check(session.submit(Side.BID, book.asks.first().price, 1, probe).matched > 0) {
                             "matching engine did not fill a marketable order"
                         }
                     }

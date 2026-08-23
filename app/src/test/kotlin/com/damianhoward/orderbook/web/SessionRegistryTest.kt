@@ -2,8 +2,10 @@ package com.damianhoward.orderbook.web
 
 import com.damianhoward.orderbook.market.Market
 import com.damianhoward.orderbook.market.SubmitOutcome
+import com.damianhoward.orderbook.model.Owner
 import com.damianhoward.orderbook.model.Price
 import com.damianhoward.orderbook.model.Side
+import com.damianhoward.orderbook.model.TimeInForce
 import com.damianhoward.orderbook.view.MarketSnapshot
 import com.sun.net.httpserver.HttpExchange
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -30,7 +32,13 @@ class SessionRegistryTest {
             side: Side,
             price: Price,
             size: Long,
+            owner: Owner,
+            timeInForce: TimeInForce,
         ): SubmitOutcome = throw UnsupportedOperationException()
+
+        override fun cancel(orderId: Long): Boolean = throw UnsupportedOperationException()
+
+        override fun sweepExpired(): Int = 0
 
         override fun snapshot(): MarketSnapshot = MarketSnapshot(0, emptyList(), emptyList(), emptyList())
 

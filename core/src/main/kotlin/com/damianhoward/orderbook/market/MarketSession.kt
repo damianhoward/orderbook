@@ -4,8 +4,11 @@ import com.damianhoward.orderbook.book.OrderBook
 import com.damianhoward.orderbook.engine.Matcher
 import com.damianhoward.orderbook.engine.MatchingEngine
 import com.damianhoward.orderbook.model.Order
+import com.damianhoward.orderbook.model.Owner
 import com.damianhoward.orderbook.model.Price
 import com.damianhoward.orderbook.model.Side
+import com.damianhoward.orderbook.model.TimeInForce
+import com.damianhoward.orderbook.model.Trade
 import com.damianhoward.orderbook.view.MarketSnapshot
 import com.damianhoward.orderbook.view.TapeEntry
 import com.lmax.disruptor.BlockingWaitStrategy
@@ -18,11 +21,23 @@ import java.util.concurrent.ThreadFactory
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.locks.LockSupport
 
-/** Fills produced by an order, plus the resulting book. */
+/**
+ * What a submit did: the [orderId] the book assigned, the [trades] it printed, and the resulting
+ * book.
+ *
+ * The id is returned because the session mints it, so without it a caller cannot cancel what it
+ * placed or recognise its own fills. The trades are returned for the same reason — a count says a
+ * submit matched, but not at what price, against whom, or in what size, which is everything a
+ * quote-driven layer needs to tell two counterparties what just happened.
+ */
 data class SubmitOutcome(
-    val matched: Int,
+    val orderId: Long,
+    val trades: List<Trade>,
     val snapshot: MarketSnapshot,
-)
+) {
+    /** How many fills printed. Retained because callers rendering a submit only need the count. */
+    val matched: Int get() = trades.size
+}
 
 /**
  * A submit was rejected because the book already holds [capacity] resting orders. The book only
@@ -35,11 +50,43 @@ class BookAtCapacityException(
 
 /** A live market: accept orders, expose the book. The seam the web layer depends on, not the impl. */
 interface Market {
+    /**
+     * Places an order and returns what it did.
+     *
+     * [owner] has no default on purpose: every order belongs to someone, and a default would hand
+     * that answer to a caller who never asked the question. It also decides who this order can
+     * trade with — self-match prevention will not fill it against another order of the same owner,
+     * so seeded liquidity ([Owner.HOUSE]) and whoever is trading against it must differ.
+     */
     fun submit(
         side: Side,
         price: Price,
         size: Long,
+        owner: Owner,
+        timeInForce: TimeInForce = TimeInForce.GoodTilCancelled,
     ): SubmitOutcome
+
+    /**
+     * Cancels a resting order, returning false where it is not there — already filled, already
+     * cancelled, or never placed. Those are the same answer to the caller, and none is exceptional.
+     *
+     * This is half of cancel-rebook, which is how a maker moves a quote's price. `modifyOrder`
+     * deliberately only shrinks size in place: keeping time priority while moving a price around
+     * is a market-abuse shape, so a new price is a new order that joins the back of its queue.
+     */
+    fun cancel(orderId: Long): Boolean
+
+    /**
+     * Removes every order whose deadline has passed and returns how many, publishing depth when
+     * anything went. Matching never needs this — a submit discards expired liquidity before it
+     * reads the book — so what it exists for is a book that tells the truth between submits, and
+     * the top-of-book change that a quote lapsing should cause even when nothing is trading.
+     *
+     * Scheduling is the caller's, not the session's: a market has no opinion about how often a
+     * deadline should be noticed, and a session that started its own timer would be one more thing
+     * owning a thread.
+     */
+    fun sweepExpired(): Int
 
     fun snapshot(): MarketSnapshot
 }
@@ -104,6 +151,8 @@ class MarketSession(
         side: Side,
         price: Price,
         size: Long,
+        owner: Owner,
+        timeInForce: TimeInForce,
     ): SubmitOutcome =
         onWriter {
             val now = clock()
@@ -111,19 +160,42 @@ class MarketSession(
             // turned away rather than left to rest its remainder. The book only grows from resting
             // limits, and the cap sits far above any legitimate hand-driven use.
             if (book.size >= maxRestingOrders) throw BookAtCapacityException(maxRestingOrders)
-            val trades = engine.submit(Order(nextId.getAndIncrement(), price, side, size))
+            val orderId = nextId.getAndIncrement()
+            val trades = engine.submit(Order(orderId, price, side, size, owner, timeInForce), now)
             trades.forEach { trade ->
-                tape.addFirst(TapeEntry(trade.price, trade.size, trade.incomingSide, now))
+                tape.addFirst(TapeEntry(trade.price, trade.size, trade.takerSide, now))
                 if (tape.size > tapeLimit) tape.removeLast()
                 fills.onFill(trade, now)
             }
             replenishEmptySides()
             // Logged only once the submit has been applied: a rejected order threw above and
             // never reaches the command log, so a replayed log contains no failing submits.
-            commands.onSubmit(SubmitCommand(side, price, size, now))
+            commands.onSubmit(SubmitCommand(side, price, size, now, owner))
             val snapshot = snapshotAt(now)
             depth.onDepth(snapshot)
-            SubmitOutcome(trades.size, snapshot)
+            SubmitOutcome(orderId, trades, snapshot)
+        }
+
+    override fun cancel(orderId: Long): Boolean =
+        onWriter {
+            val removed = book.removeOrder(orderId)
+            if (removed) {
+                replenishEmptySides()
+                depth.onDepth(snapshotAt(clock()))
+            }
+            removed
+        }
+
+    override fun sweepExpired(): Int =
+        onWriter {
+            val now = clock()
+            val expired = Side.entries.flatMap { book.getOrders(it) }.filter { it.hasExpiredAt(now) }
+            expired.forEach { book.removeOrder(it.id) }
+            if (expired.isNotEmpty()) {
+                replenishEmptySides()
+                depth.onDepth(snapshotAt(now))
+            }
+            expired.size
         }
 
     override fun snapshot(): MarketSnapshot = onWriter { snapshotAt(clock()) }
@@ -141,7 +213,7 @@ class MarketSession(
     }
 
     private fun place(orders: List<SeedOrder>) =
-        orders.forEach { book.addOrder(Order(nextId.getAndIncrement(), it.price, it.side, it.size)) }
+        orders.forEach { book.addOrder(Order(nextId.getAndIncrement(), it.price, it.side, it.size, Owner.HOUSE)) }
 
     /**
      * Runs [block] on the owning thread and returns its result. The block's own exception propagates

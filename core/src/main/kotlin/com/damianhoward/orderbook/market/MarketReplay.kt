@@ -7,6 +7,10 @@ import com.damianhoward.orderbook.view.MarketSnapshot
  * resulting snapshot. The session's clock is driven from each command's recorded timestamp, so
  * the tape prints with the original times and the snapshot matches the one the live session
  * produced after its last command.
+ *
+ * Each command is replayed as the party that submitted it, which the log records for exactly this
+ * reason: self-match prevention decides whether an order fills or cancels what it met, so replaying
+ * a multi-party log under one identity would produce a different book and still look plausible.
  */
 fun replay(
     seed: SeedLiquidity,
@@ -17,7 +21,7 @@ fun replay(
     MarketSession(seed = seed, clock = { now }, tapeLimit = tapeLimit).use { session ->
         commands.forEach { command ->
             now = command.timeMillis
-            session.submit(command.side, command.price, command.size)
+            session.submit(command.side, command.price, command.size, command.owner)
         }
         return session.snapshot()
     }

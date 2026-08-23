@@ -5,12 +5,19 @@ package com.damianhoward.orderbook.model
  * id are the same order regardless of remaining size. [size] is the *remaining* quantity and mutates
  * in place as the order partially fills, so the book never reallocates an `Order` on a size change;
  * accessors hand out detached [snapshot]s, never the live entity.
+ *
+ * [owner] and [timeInForce] are carried by the order and never consulted by price–time priority.
+ * The matcher reads [timeInForce] only to decide what happens to an unfilled remainder and whether
+ * a resting order is still tradeable; it never reads [owner] at all. That is what keeps the book
+ * anonymous while letting the layers above answer whose fill it was.
  */
 class Order(
     val id: Long,
     val price: Price,
     val side: Side,
     size: Long,
+    val owner: Owner,
+    val timeInForce: TimeInForce = TimeInForce.GoodTilCancelled,
 ) {
     var size: Long = size
         set(value) {
@@ -22,12 +29,15 @@ class Order(
         require(size > 0) { "size must be positive, got $size" }
     }
 
+    /** True when this order must not trade at [nowMillis] — see [TimeInForce.GoodTilTime]. */
+    fun hasExpiredAt(nowMillis: Long): Boolean = timeInForce.hasExpiredAt(nowMillis)
+
     /** A detached copy at the current size — handed to callers so the live book entity never escapes. */
-    fun snapshot(): Order = Order(id, price, side, size)
+    fun snapshot(): Order = Order(id, price, side, size, owner, timeInForce)
 
     override fun equals(other: Any?): Boolean = this === other || (other is Order && other.id == id)
 
     override fun hashCode(): Int = id.hashCode()
 
-    override fun toString(): String = "Order(id=$id, price=$price, side=$side, size=$size)"
+    override fun toString(): String = "Order(id=$id, price=$price, side=$side, size=$size, owner=$owner, tif=$timeInForce)"
 }

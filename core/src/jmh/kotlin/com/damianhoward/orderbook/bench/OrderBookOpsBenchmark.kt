@@ -2,6 +2,7 @@ package com.damianhoward.orderbook.bench
 
 import com.damianhoward.orderbook.book.OrderBook
 import com.damianhoward.orderbook.model.Order
+import com.damianhoward.orderbook.model.Owner
 import com.damianhoward.orderbook.model.Price
 import com.damianhoward.orderbook.model.Side
 import org.openjdk.jmh.annotations.Benchmark
@@ -36,6 +37,11 @@ import java.util.concurrent.atomic.AtomicLong
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
 open class OrderBookOpsBenchmark {
+    // One participant for the whole benchmark; distinct from Owner.HOUSE so nothing measured here
+    // is cancelled by self-match prevention instead of matching. NOW is fixed so no order expires.
+    private val bench = Owner("bench")
+    private val now = 1_000_000L
+
     @Param("10000")
     var prepopulated: Int = 0
 
@@ -54,7 +60,9 @@ open class OrderBookOpsBenchmark {
         nextId.set(prepopulated.toLong())
         for (i in 0 until prepopulated) {
             val side = nextSide(i.toLong())
-            book.addOrder(Order(i.toLong(), priceFor(side, i.toLong(), priceLevels), side, RESTING_SIZE))
+            // The resting book belongs to the house; the aggressor below is bench. Same owner on
+            // both sides would have this measure self-match cancellation instead of the fill loop.
+            book.addOrder(Order(i.toLong(), priceFor(side, i.toLong(), priceLevels), side, RESTING_SIZE, Owner.HOUSE))
         }
     }
 
@@ -90,7 +98,7 @@ open class OrderBookOpsBenchmark {
     @Benchmark
     fun addThenRemoveAtABusyPrice(bh: Blackhole) {
         val id = nextId.incrementAndGet()
-        book.addOrder(Order(id, busyBidPrice, Side.BID, RESTING_SIZE))
+        book.addOrder(Order(id, busyBidPrice, Side.BID, RESTING_SIZE, bench))
         bh.consume(book.removeOrder(id))
     }
 

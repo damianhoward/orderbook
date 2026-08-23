@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test
 class TestOrder {
     @Test
     fun snapshotIsDetachedCopyAtCurrentSize() {
-        val order = Order(1L, Price.of("10"), Side.BID, 5)
+        val order = order(1L, Price.of("10"), Side.BID, 5)
         order.size = 8
         val snap = order.snapshot()
         assertEquals(8L, snap.size)
@@ -21,9 +21,9 @@ class TestOrder {
 
     @Test
     fun identityIsById() {
-        val order = Order(1L, Price.of("10"), Side.BID, 5)
-        val sameIdDifferentState = Order(1L, Price.of("99"), Side.OFFER, 1)
-        val differentId = Order(2L, Price.of("10"), Side.BID, 5)
+        val order = order(1L, Price.of("10"), Side.BID, 5)
+        val sameIdDifferentState = order(1L, Price.of("99"), Side.OFFER, 1)
+        val differentId = order(2L, Price.of("10"), Side.BID, 5)
 
         assertTrue(order == order)
         assertEquals(order, sameIdDifferentState)
@@ -35,15 +35,15 @@ class TestOrder {
 
     @Test
     fun sizeMustStayPositive() {
-        val order = Order(1L, Price.of("10"), Side.BID, 5)
+        val order = order(1L, Price.of("10"), Side.BID, 5)
         assertThrows(IllegalArgumentException::class.java) { order.size = 0 }
         assertThrows(IllegalArgumentException::class.java) { order.size = -1 }
-        assertThrows(IllegalArgumentException::class.java) { Order(2L, Price.of("10"), Side.BID, 0) }
+        assertThrows(IllegalArgumentException::class.java) { order(2L, Price.of("10"), Side.BID, 0) }
     }
 
     @Test
     fun toStringCarriesTheFields() {
-        val text = Order(7L, Price.of("12"), Side.OFFER, 3).toString()
+        val text = order(7L, Price.of("12"), Side.OFFER, 3).toString()
         assertTrue(text.contains("id=7"))
         assertTrue(text.contains("size=3"))
     }

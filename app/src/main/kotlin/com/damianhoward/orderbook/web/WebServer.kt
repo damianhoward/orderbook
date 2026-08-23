@@ -11,6 +11,7 @@ import com.damianhoward.orderbook.market.DepthListener
 import com.damianhoward.orderbook.market.FillListener
 import com.damianhoward.orderbook.market.Market
 import com.damianhoward.orderbook.market.MarketSession
+import com.damianhoward.orderbook.model.Owner
 import com.damianhoward.orderbook.model.Price
 import com.damianhoward.orderbook.model.Side
 import com.damianhoward.orderbook.quote.QuoteSeed
@@ -200,8 +201,23 @@ class WebServer(
 
         // The SSE push is not done here: the market's depth stream broadcasts on the writer
         // thread, so racing submits can't deliver stale frames out of order.
-        val outcome = session.submit(side, price, size)
+        val outcome = session.submit(side, price, size, trader(exchange))
         return """{"matched":${outcome.matched},${outcome.snapshot.toJson().drop(1)}"""
+    }
+
+    /**
+     * Who this submit belongs to. The book is anonymous to its participants — nothing published
+     * carries an owner — but it is not unowned, and the party matters here for one reason: two
+     * orders from the same owner will not trade with each other. One shared identity for every
+     * visitor would mean two people on the site could not fill each other's orders.
+     *
+     * Derived from the same client key the rate limiter uses, so it follows `ClientIp`'s trust rule
+     * through Caddy and the desk, and hashed rather than carried: an address is the visitor's, and
+     * the domain has no business holding one to tell two traders apart.
+     */
+    private fun trader(exchange: HttpExchange): Owner {
+        val key = ClientIp.of(exchange.remoteAddress.address, exchange.requestHeaders.getFirst("X-Forwarded-For"))
+        return Owner("trader-%08x".format(key.hashCode()))
     }
 
     private fun parseSide(raw: String?): Side =

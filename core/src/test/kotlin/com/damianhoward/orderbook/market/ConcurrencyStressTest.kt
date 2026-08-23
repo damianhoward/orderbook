@@ -2,6 +2,7 @@ package com.damianhoward.orderbook.market
 
 import com.damianhoward.orderbook.model.Price
 import com.damianhoward.orderbook.model.Side
+import com.damianhoward.orderbook.model.TRADER
 import com.damianhoward.orderbook.view.MarketSnapshot
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -49,7 +50,7 @@ class ConcurrencyStressTest {
                 executor.submit {
                     runCatching {
                         startGate.await()
-                        repeat(submitsPerThread) { session.submit(Side.BID, price(50), 1) }
+                        repeat(submitsPerThread) { session.submit(Side.BID, price(50), 1, TRADER) }
                     }.onFailure { errors.add(it) }
                     done.countDown()
                 }
@@ -87,7 +88,7 @@ class ConcurrencyStressTest {
                     runCatching {
                         startGate.await()
                         // Marketable across the whole ladder; any unfilled remainder rests.
-                        repeat(submitsPerThread) { printed.addAndGet(session.submit(Side.BID, price(200), 3).matched.toLong()) }
+                        repeat(submitsPerThread) { printed.addAndGet(session.submit(Side.BID, price(200), 3, TRADER).matched.toLong()) }
                     }.onFailure { errors.add(it) }
                     done.countDown()
                 }
@@ -129,7 +130,7 @@ class ConcurrencyStressTest {
                         val rng = ThreadLocalRandom.current()
                         repeat(opsPerWriter) {
                             val side = if (rng.nextBoolean()) Side.BID else Side.OFFER
-                            session.submit(side, price(rng.nextInt(90, 111)), rng.nextLong(1, 10))
+                            session.submit(side, price(rng.nextInt(90, 111)), rng.nextLong(1, 10), TRADER)
                         }
                     }.onFailure { errors.add(it) }
                     writersDone.countDown()

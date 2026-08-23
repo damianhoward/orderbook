@@ -1,12 +1,14 @@
 package com.damianhoward.orderbook.bench
 
 import com.damianhoward.orderbook.kafka.KafkaMarketEgress
+import com.damianhoward.orderbook.kafka.SymbolEgress
 import com.damianhoward.orderbook.market.CommandListener
 import com.damianhoward.orderbook.market.DepthListener
 import com.damianhoward.orderbook.market.FillListener
 import com.damianhoward.orderbook.market.MarketSession
 import com.damianhoward.orderbook.market.SeedLiquidity
 import com.damianhoward.orderbook.market.SeedOrder
+import com.damianhoward.orderbook.model.Owner
 import com.damianhoward.orderbook.model.Price
 import com.damianhoward.orderbook.model.Side
 import org.apache.kafka.clients.producer.Callback
@@ -47,16 +49,26 @@ private const val RESTING_SIZE = 100L
 @BenchmarkMode(Mode.SampleTime)
 @OutputTimeUnit(TimeUnit.MICROSECONDS)
 open class MarketSessionBenchmark {
+    // Distinct from Owner.HOUSE, which owns the seeded ladder: an order from the house would be
+    // cancelled by self-match prevention rather than matching, which would measure the wrong path.
+    private val bench = Owner("bench")
+
     @Param("none", "kafka")
     var egress: String = ""
 
     private lateinit var session: MarketSession
     private var publisher: KafkaMarketEgress? = null
+
+    // KafkaMarketEgress is not itself a listener — SymbolEgress is, and it closes over the symbol
+    // that tags every record. Passing the egress where a FillListener was wanted is why this source
+    // set stopped compiling, unnoticed, because `build` never compiles it.
+    private var listener: SymbolEgress? = null
     private val offerPrice = Price(101L * UNIT)
 
     @Setup(Level.Iteration)
     fun setup() {
         publisher = if (egress == "kafka") KafkaMarketEgress(DiscardingProducer()).also { it.start() } else null
+        listener = publisher?.forSymbol("SIM")
         session =
             MarketSession(
                 seed =
@@ -66,9 +78,9 @@ open class MarketSessionBenchmark {
                             SeedOrder(Price(99L * UNIT), Side.BID, RESTING_SIZE),
                         ),
                     ),
-                fills = publisher ?: FillListener.NONE,
-                commands = publisher ?: CommandListener.NONE,
-                depth = publisher ?: DepthListener.NONE,
+                fills = listener ?: FillListener.NONE,
+                commands = listener ?: CommandListener.NONE,
+                depth = listener ?: DepthListener.NONE,
             )
     }
 
@@ -81,7 +93,7 @@ open class MarketSessionBenchmark {
     /** Sweeps the lone seeded offer in full; the session replenishes it, so the book is stationary. */
     @Benchmark
     fun submitCrossing(bh: Blackhole) {
-        bh.consume(session.submit(Side.BID, offerPrice, RESTING_SIZE))
+        bh.consume(session.submit(Side.BID, offerPrice, RESTING_SIZE, bench))
     }
 
     /**

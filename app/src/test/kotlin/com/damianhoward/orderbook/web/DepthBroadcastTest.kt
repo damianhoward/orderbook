@@ -1,6 +1,7 @@
 package com.damianhoward.orderbook.web
 
 import com.damianhoward.orderbook.model.Order
+import com.damianhoward.orderbook.model.Owner
 import com.damianhoward.orderbook.model.Price
 import com.damianhoward.orderbook.model.Side
 import com.damianhoward.orderbook.view.MarketSnapshot
@@ -27,7 +28,7 @@ class DepthBroadcastTest {
             }
         val snapshot =
             MarketSnapshot.of(
-                bids = listOf(Order(1, Price.of("99"), Side.BID, 5)),
+                bids = listOf(Order(1, Price.of("99"), Side.BID, 5, Owner("trader"))),
                 asks = emptyList(),
                 tape = emptyList(),
                 timeMillis = 7,

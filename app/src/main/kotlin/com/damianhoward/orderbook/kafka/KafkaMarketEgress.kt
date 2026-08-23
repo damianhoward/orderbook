@@ -242,14 +242,15 @@ class KafkaMarketEgress(
         val trade = fill.trade
         return """{"v":1,"execId":${quote(fill.execId)},"symbol":${quote(fill.symbol)},""" +
             """"price":${quote(trade.price.toString())},"size":${trade.size},""" +
-            """"makerOrderId":${trade.restingOrderId},"takerOrderId":${trade.incomingOrderId},""" +
-            """"aggressor":${quote(trade.incomingSide.name)},"ts":${fill.timeMillis}}"""
+            """"makerOrderId":${trade.makerOrderId},"takerOrderId":${trade.takerOrderId},""" +
+            """"aggressor":${quote(trade.takerSide.name)},"ts":${fill.timeMillis}}"""
     }
 
     private fun commandJson(pending: PendingCommand): String {
         val command = pending.command
         return """{"v":1,"symbol":${quote(pending.symbol)},"side":${quote(command.side.name)},""" +
-            """"price":${quote(command.price.toString())},"size":${command.size},"ts":${command.timeMillis}}"""
+            """"price":${quote(command.price.toString())},"size":${command.size},""" +
+            """"owner":${quote(command.owner.id)},"ts":${command.timeMillis}}"""
     }
 
     // The book body comes from the view layer's serialisation; the egress adds only its envelope.

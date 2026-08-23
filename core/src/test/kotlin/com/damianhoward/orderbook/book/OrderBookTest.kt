@@ -1,8 +1,8 @@
 package com.damianhoward.orderbook.book
 
-import com.damianhoward.orderbook.model.Order
 import com.damianhoward.orderbook.model.Price
 import com.damianhoward.orderbook.model.Side
+import com.damianhoward.orderbook.model.order
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
@@ -25,17 +25,17 @@ class OrderBookTest {
     @BeforeEach
     fun setup() {
         orderBook = OrderBook()
-        orderBook.addOrder(Order(1L, price("19"), Side.OFFER, 8))
-        orderBook.addOrder(Order(2L, price("19"), Side.OFFER, 4))
-        orderBook.addOrder(Order(5L, price("22"), Side.OFFER, 7))
-        orderBook.addOrder(Order(3L, price("21"), Side.OFFER, 16))
-        orderBook.addOrder(Order(4L, price("21"), Side.OFFER, 1))
-        orderBook.addOrder(Order(6L, price("15"), Side.BID, 5))
+        orderBook.addOrder(order(1L, price("19"), Side.OFFER, 8))
+        orderBook.addOrder(order(2L, price("19"), Side.OFFER, 4))
+        orderBook.addOrder(order(5L, price("22"), Side.OFFER, 7))
+        orderBook.addOrder(order(3L, price("21"), Side.OFFER, 16))
+        orderBook.addOrder(order(4L, price("21"), Side.OFFER, 1))
+        orderBook.addOrder(order(6L, price("15"), Side.BID, 5))
         orderBook.modifyOrder(6L, 10)
-        orderBook.addOrder(Order(7L, price("13"), Side.BID, 20))
+        orderBook.addOrder(order(7L, price("13"), Side.BID, 20))
         orderBook.removeOrder(7L)
-        orderBook.addOrder(Order(8L, price("10"), Side.BID, 13))
-        orderBook.addOrder(Order(9L, price("10"), Side.BID, 13))
+        orderBook.addOrder(order(8L, price("10"), Side.BID, 13))
+        orderBook.addOrder(order(9L, price("10"), Side.BID, 13))
     }
 
     @Test
@@ -135,7 +135,7 @@ class OrderBookTest {
 
     @Test
     fun testAddExistingIdRemovesOldOrder() {
-        orderBook.addOrder(Order(1L, price("23"), Side.OFFER, 11))
+        orderBook.addOrder(order(1L, price("23"), Side.OFFER, 11))
 
         val offers = orderBook.getOrders(Side.OFFER)
         assertEquals(listOf(2L, 3L, 4L, 5L, 1L), offers.map { it.id })
@@ -146,7 +146,7 @@ class OrderBookTest {
 
     @Test
     fun testAddExistingIdCanMoveSides() {
-        orderBook.addOrder(Order(1L, price("16"), Side.BID, 11))
+        orderBook.addOrder(order(1L, price("16"), Side.BID, 11))
 
         assertEquals(listOf(2L, 3L, 4L, 5L), orderBook.getOrders(Side.OFFER).map { it.id })
         assertEquals(listOf(1L, 6L, 8L, 9L), orderBook.getOrders(Side.BID).map { it.id })
@@ -246,7 +246,7 @@ class OrderBookTest {
 
     @Test
     fun removingFromTheMiddleOfALevelKeepsTheRestInTimeOrder() {
-        orderBook.addOrder(Order(10L, price("19"), Side.OFFER, 5))
+        orderBook.addOrder(order(10L, price("19"), Side.OFFER, 5))
         assertEquals(listOf(1L, 2L, 10L), restingIdsAt(Side.OFFER, price("19")))
 
         orderBook.removeOrder(2L)
@@ -257,7 +257,7 @@ class OrderBookTest {
 
     @Test
     fun removingTheHeadAndTheTailBothRelinkTheLevel() {
-        orderBook.addOrder(Order(10L, price("19"), Side.OFFER, 5))
+        orderBook.addOrder(order(10L, price("19"), Side.OFFER, 5))
 
         orderBook.removeOrder(1L) // head
         assertEquals(listOf(2L, 10L), restingIdsAt(Side.OFFER, price("19")))
@@ -281,7 +281,7 @@ class OrderBookTest {
     fun replacingAnIdAtTheSamePriceMovesTheTotalDownThenUp() {
         // addOrder's duplicate-id path drops the resting order first. Both halves touch the same
         // level's total, so a replacement that only added would inflate depth permanently.
-        orderBook.addOrder(Order(1L, price("19"), Side.OFFER, 30))
+        orderBook.addOrder(order(1L, price("19"), Side.OFFER, 30))
 
         assertEquals(34L, orderBook.getTotalSize(Side.OFFER, 1), "30 + 4, not 8 + 4 + 30")
         assertEquals(listOf(2L, 1L), restingIdsAt(Side.OFFER, price("19")), "the replacement loses its old priority")
@@ -298,7 +298,7 @@ class OrderBookTest {
         val id = 42L
         assertFalse(orderBook.contains(id))
 
-        orderBook.addOrder(Order(id, price("14"), Side.BID, 3))
+        orderBook.addOrder(order(id, price("14"), Side.BID, 3))
         assertTrue(orderBook.contains(id))
 
         // A modify keeps the order resting; only removal releases the id.
