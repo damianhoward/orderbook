@@ -1,6 +1,7 @@
 package com.damianhoward.orderbook.kafka
 
 import com.damianhoward.orderbook.market.SubmitCommand
+import com.damianhoward.orderbook.model.Owner
 import com.damianhoward.orderbook.model.Price
 import com.damianhoward.orderbook.model.Side
 import com.damianhoward.orderbook.model.Trade
@@ -18,11 +19,13 @@ class KafkaMarketEgressTest {
         Trade(
             price = Price.of("101.00"),
             size = 5,
-            restingOrderId = 7,
-            incomingOrderId = 9,
-            incomingSide = Side.BID,
+            makerOrderId = 7,
+            takerOrderId = 9,
+            takerSide = Side.BID,
+            maker = Owner("maker"),
+            taker = Owner("taker"),
         )
-    private val command = SubmitCommand(Side.BID, Price.of("101.00"), 5, 1_000L)
+    private val command = SubmitCommand(Side.BID, Price.of("101.00"), 5, 1_000L, Owner("taker"))
     private val snapshot =
         MarketSnapshot(
             timeMillis = 1_000L,
@@ -75,7 +78,7 @@ class KafkaMarketEgressTest {
         assertEquals("orderbook.commands", record.topic())
         assertEquals("SIM", record.key())
         assertEquals(
-            """{"v":1,"symbol":"SIM","side":"BID","price":"101.00000000","size":5,"ts":1000}""",
+            """{"v":1,"symbol":"SIM","side":"BID","price":"101.00000000","size":5,"owner":"taker","ts":1000}""",
             record.value(),
         )
     }
@@ -161,8 +164,8 @@ class KafkaMarketEgressTest {
         // Not started: nothing drains, so capacity 1 forces the overflow path deterministically.
         val egress = KafkaMarketEgress(producer, durableCapacity = 1)
         egress.fill("SIM", trade, 1L)
-        egress.fill("SIM", trade.copy(incomingOrderId = 10), 2L)
-        egress.fill("SIM", trade.copy(incomingOrderId = 11), 3L)
+        egress.fill("SIM", trade.copy(takerOrderId = 10), 2L)
+        egress.fill("SIM", trade.copy(takerOrderId = 11), 3L)
 
         assertEquals(2, egress.lost, "two overflow fills should have been counted lost")
         assertEquals(0, egress.dropped, "durable overflow is loss, not benign depth shedding")
@@ -250,8 +253,8 @@ class KafkaMarketEgressTest {
         // lost at once rather than blocking on an ack that will never come.
         val egress = KafkaMarketEgress(producer, shutdownFlush = Duration.ZERO)
         egress.fill("SIM", trade, 1L)
-        egress.fill("SIM", trade.copy(incomingOrderId = 10), 2L)
-        egress.fill("SIM", trade.copy(incomingOrderId = 11), 3L)
+        egress.fill("SIM", trade.copy(takerOrderId = 10), 2L)
+        egress.fill("SIM", trade.copy(takerOrderId = 11), 3L)
         egress.close()
 
         assertEquals(3, egress.lost, "every unflushed durable record is accounted for")
@@ -277,8 +280,8 @@ class KafkaMarketEgressTest {
             )
         egress.start()
         egress.fill("SIM", trade, 1L)
-        egress.fill("SIM", trade.copy(incomingOrderId = 10), 2L)
-        egress.fill("SIM", trade.copy(incomingOrderId = 11), 3L)
+        egress.fill("SIM", trade.copy(takerOrderId = 10), 2L)
+        egress.fill("SIM", trade.copy(takerOrderId = 11), 3L)
         awaitTrue("the drain thread is inside a confirmed send") { producer.history().size == 1 }
 
         egress.close()

@@ -3,6 +3,7 @@ package com.damianhoward.orderbook.bench
 import com.damianhoward.orderbook.book.OrderBook
 import com.damianhoward.orderbook.engine.MatchingEngine
 import com.damianhoward.orderbook.model.Order
+import com.damianhoward.orderbook.model.Owner
 import com.damianhoward.orderbook.model.Price
 import com.damianhoward.orderbook.model.Side
 import org.openjdk.jmh.annotations.Benchmark
@@ -33,6 +34,11 @@ import java.util.concurrent.atomic.AtomicLong
 @BenchmarkMode(Mode.SampleTime)
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
 open class MatchingEngineBenchmark {
+    // One participant for the whole benchmark; distinct from the maker owning the resting book, so
+    // is cancelled by self-match prevention instead of matching. NOW is fixed so no order expires.
+    private val bench = Owner("bench")
+    private val now = 1_000_000L
+
     @Param("10000")
     var prepopulated: Int = 0
 
@@ -55,7 +61,9 @@ open class MatchingEngineBenchmark {
         nextId.set(prepopulated.toLong())
         for (i in 0 until prepopulated) {
             val side = nextSide(i.toLong())
-            book.addOrder(Order(i.toLong(), priceFor(side, i.toLong(), priceLevels), side, RESTING_SIZE))
+            // The resting book belongs to a maker; the aggressor below is someone else. The same
+            // owner on both sides would measure self-match cancellation, not the fill loop.
+            book.addOrder(Order(i.toLong(), priceFor(side, i.toLong(), priceLevels), side, RESTING_SIZE, Owner("mm-bench")))
         }
     }
 
@@ -66,9 +74,9 @@ open class MatchingEngineBenchmark {
      */
     @Benchmark
     fun submitCrossingTopOfBook(bh: Blackhole) {
-        val incoming = Order(nextId.incrementAndGet(), bestOfferPrice, Side.BID, RESTING_SIZE)
-        bh.consume(engine.submit(incoming))
-        book.addOrder(Order(nextId.incrementAndGet(), bestOfferPrice, Side.OFFER, RESTING_SIZE))
+        val incoming = Order(nextId.incrementAndGet(), bestOfferPrice, Side.BID, RESTING_SIZE, bench)
+        bh.consume(engine.submit(incoming, now))
+        book.addOrder(Order(nextId.incrementAndGet(), bestOfferPrice, Side.OFFER, RESTING_SIZE, Owner("mm-bench")))
     }
 
     /**
@@ -78,7 +86,7 @@ open class MatchingEngineBenchmark {
     @Benchmark
     fun submitResting(bh: Blackhole) {
         val id = nextId.incrementAndGet()
-        bh.consume(engine.submit(Order(id, restingBidPrice, Side.BID, RESTING_SIZE)))
+        bh.consume(engine.submit(Order(id, restingBidPrice, Side.BID, RESTING_SIZE, bench), now))
         book.removeOrder(id)
     }
 }

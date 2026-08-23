@@ -15,7 +15,7 @@ data class DepthLevel(
 data class TapeEntry(
     val price: Price,
     val size: Long,
-    val incomingSide: Side,
+    val takerSide: Side,
     val timeMillis: Long,
 )
 
@@ -49,7 +49,7 @@ data class MarketSnapshot(
 
     private fun tapeJson(entry: TapeEntry): String {
         val price = quote(entry.price.toString())
-        val side = quote(entry.incomingSide.name)
+        val side = quote(entry.takerSide.name)
         return """{"price":$price,"size":${entry.size},"side":$side,"time":${entry.timeMillis}}"""
     }
 

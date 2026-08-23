@@ -1,8 +1,8 @@
 package com.damianhoward.orderbook.view
 
-import com.damianhoward.orderbook.model.Order
 import com.damianhoward.orderbook.model.Price
 import com.damianhoward.orderbook.model.Side
+import com.damianhoward.orderbook.model.order
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -13,7 +13,7 @@ class MarketSnapshotTest {
         side: Side,
         size: Long,
         id: Long = 1,
-    ) = Order(id, Price.of(price), side, size)
+    ) = order(id, Price.of(price), side, size)
 
     @Test
     fun `aggregate of nothing is empty`() {

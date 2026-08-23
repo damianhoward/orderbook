@@ -10,8 +10,10 @@ import com.damianhoward.orderbook.market.BookAtCapacityException
 import com.damianhoward.orderbook.market.Market
 import com.damianhoward.orderbook.market.MarketSession
 import com.damianhoward.orderbook.market.SubmitOutcome
+import com.damianhoward.orderbook.model.Owner
 import com.damianhoward.orderbook.model.Price
 import com.damianhoward.orderbook.model.Side
+import com.damianhoward.orderbook.model.TimeInForce
 import com.damianhoward.orderbook.quote.QuoteSeed
 import com.damianhoward.orderbook.view.MarketSnapshot
 import org.junit.jupiter.api.AfterEach
@@ -338,7 +340,13 @@ class WebServerTest {
                     side: Side,
                     price: Price,
                     size: Long,
+                    owner: Owner,
+                    timeInForce: TimeInForce,
                 ): SubmitOutcome = throw IllegalStateException("boom")
+
+                override fun cancel(orderId: Long): Boolean = throw UnsupportedOperationException()
+
+                override fun sweepExpired(): Int = 0
 
                 override fun snapshot(): MarketSnapshot = throw IllegalStateException("boom")
             }
@@ -407,7 +415,13 @@ class WebServerTest {
                     side: Side,
                     price: Price,
                     size: Long,
+                    owner: Owner,
+                    timeInForce: TimeInForce,
                 ): SubmitOutcome = throw BookAtCapacityException(1000)
+
+                override fun cancel(orderId: Long): Boolean = throw UnsupportedOperationException()
+
+                override fun sweepExpired(): Int = 0
 
                 override fun snapshot(): MarketSnapshot = throw UnsupportedOperationException("not used")
             }

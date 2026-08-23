@@ -5,6 +5,7 @@ import com.damianhoward.orderbook.market.SeedLiquidity
 import com.damianhoward.orderbook.market.SeedOrder
 import com.damianhoward.orderbook.market.SubmitCommand
 import com.damianhoward.orderbook.market.replay
+import com.damianhoward.orderbook.model.Owner
 import com.damianhoward.orderbook.model.Price
 import com.damianhoward.orderbook.model.Side
 import org.apache.kafka.clients.consumer.ConsumerConfig
@@ -38,8 +39,8 @@ class KafkaEgressIntegrationTest {
     private val seed =
         SeedLiquidity(
             listOf(
-                SeedOrder(Price.of("101.00"), Side.OFFER, 5),
-                SeedOrder(Price.of("99.00"), Side.BID, 5),
+                SeedOrder(Price.of("101.00"), Side.OFFER, 5, Owner("mm-seed")),
+                SeedOrder(Price.of("99.00"), Side.BID, 5, Owner("mm-seed")),
             ),
         )
 
@@ -56,11 +57,11 @@ class KafkaEgressIntegrationTest {
                 commands = symbolEgress,
                 depth = symbolEgress,
             ).use { session ->
-                session.submit(Side.BID, Price.of("101.00"), 5)
+                session.submit(Side.BID, Price.of("101.00"), 5, Owner("taker"))
                 now = 2_000L
-                session.submit(Side.OFFER, Price.of("100.50"), 4)
+                session.submit(Side.OFFER, Price.of("100.50"), 4, Owner("maker"))
                 now = 3_000L
-                session.submit(Side.BID, Price.of("100.50"), 2)
+                session.submit(Side.BID, Price.of("100.50"), 2, Owner("taker"))
                 session.snapshot()
             }
         // 3 commands + 2 fills (the 101 sweep and the partial at 100.50) + 4 depth snapshots
@@ -123,6 +124,7 @@ class KafkaEgressIntegrationTest {
             price = Price.of(field("price")),
             size = field("size").toLong(),
             timeMillis = field("ts").toLong(),
+            owner = Owner(field("owner")),
         )
     }
 }
