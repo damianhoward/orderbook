@@ -17,6 +17,10 @@ package com.damianhoward.orderbook.model
  * quote-driven market differs by being *disclosed*, not by having owners where the book had none.
  *
  * So there is no default and no sentinel. An order carries an owner because a caller named one.
+ *
+ * There is also no constant for the venue, because a venue is not a counterparty. An exchange
+ * matches orders; it does not take the other side of them. The book's opening liquidity belongs to
+ * the market makers quoting it — see [com.damianhoward.orderbook.market.SeedLiquidity].
  */
 @JvmInline
 value class Owner(
@@ -27,14 +31,4 @@ value class Owner(
     }
 
     override fun toString(): String = id
-
-    companion object {
-        /**
-         * The venue's own resting liquidity — the seeded ladder a session opens with and tops a
-         * swept side up from. A real party rather than a placeholder: it is the counterparty on
-         * the other side of most fills the live book prints, and self-match prevention treats it
-         * like any other, which is why anything that must trade against it has to be someone else.
-         */
-        val HOUSE = Owner("house")
-    }
 }

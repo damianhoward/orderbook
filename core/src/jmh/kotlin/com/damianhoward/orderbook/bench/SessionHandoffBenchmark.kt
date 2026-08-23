@@ -38,9 +38,12 @@ import java.util.concurrent.TimeUnit
 @OutputTimeUnit(TimeUnit.SECONDS)
 @Threads(8)
 open class SessionHandoffBenchmark {
-    // Distinct from Owner.HOUSE, which owns the seeded ladder: an order from the house would be
+    // Distinct from the makers quoting the seeded ladder: an order from one of them would be
     // cancelled by self-match prevention rather than matching, which would measure the wrong path.
     private val bench = Owner("bench")
+
+    // The ladder is one maker's; the aggressor is someone else, so the fill loop is what is measured.
+    private val maker = Owner("mm-bench")
 
     @Param("blocking", "busy-spin")
     var waitStrategy: String = ""
@@ -52,8 +55,8 @@ open class SessionHandoffBenchmark {
     private val ladder =
         (1..200).flatMap {
             listOf(
-                SeedOrder(Price((100L + it) * UNIT), Side.OFFER, RESTING_SIZE),
-                SeedOrder(Price((100L - it) * UNIT), Side.BID, RESTING_SIZE),
+                SeedOrder(Price((100L + it) * UNIT), Side.OFFER, RESTING_SIZE, maker),
+                SeedOrder(Price((100L - it) * UNIT), Side.BID, RESTING_SIZE, maker),
             )
         }
 

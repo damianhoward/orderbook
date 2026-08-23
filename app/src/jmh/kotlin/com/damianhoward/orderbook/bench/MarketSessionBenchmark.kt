@@ -49,9 +49,13 @@ private const val RESTING_SIZE = 100L
 @BenchmarkMode(Mode.SampleTime)
 @OutputTimeUnit(TimeUnit.MICROSECONDS)
 open class MarketSessionBenchmark {
-    // Distinct from Owner.HOUSE, which owns the seeded ladder: an order from the house would be
+    // Distinct from the makers quoting the seeded ladder: an order from one of them would be
     // cancelled by self-match prevention rather than matching, which would measure the wrong path.
     private val bench = Owner("bench")
+
+    // The seeded ladder is one maker's; the aggressor is someone else, so a submit measures the
+    // fill path rather than self-match cancellation.
+    private val maker = Owner("mm-bench")
 
     @Param("none", "kafka")
     var egress: String = ""
@@ -74,8 +78,8 @@ open class MarketSessionBenchmark {
                 seed =
                     SeedLiquidity(
                         listOf(
-                            SeedOrder(offerPrice, Side.OFFER, RESTING_SIZE),
-                            SeedOrder(Price(99L * UNIT), Side.BID, RESTING_SIZE),
+                            SeedOrder(offerPrice, Side.OFFER, RESTING_SIZE, maker),
+                            SeedOrder(Price(99L * UNIT), Side.BID, RESTING_SIZE, maker),
                         ),
                     ),
                 fills = listener ?: FillListener.NONE,

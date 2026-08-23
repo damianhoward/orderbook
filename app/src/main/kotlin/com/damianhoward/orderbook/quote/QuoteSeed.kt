@@ -24,12 +24,14 @@ object QuoteSeed {
     fun around(quote: Quote): SeedLiquidity {
         val mid = quote.last
         val offers =
-            OFFSET_PERCENTAGES.zip(OFFER_SIZES).map { (percent, size) ->
-                SeedOrder(tick(mid + mid.multiply(percent)), Side.OFFER, size)
+            OFFSET_PERCENTAGES.zip(OFFER_SIZES).mapIndexed { level, (percent, size) ->
+                SeedOrder(tick(mid + mid.multiply(percent)), Side.OFFER, size, SeedLiquidity.makerAt(level))
             }
         val bids =
-            OFFSET_PERCENTAGES.zip(BID_SIZES).map { (percent, size) ->
-                SeedOrder(tick(mid - mid.multiply(percent)), Side.BID, size)
+            OFFSET_PERCENTAGES.zip(BID_SIZES).mapIndexed { level, (percent, size) ->
+                // Offset by one so a maker does not quote the same level on both sides, which is
+                // the one arrangement that would have it repeatedly cancelling its own liquidity.
+                SeedOrder(tick(mid - mid.multiply(percent)), Side.BID, size, SeedLiquidity.makerAt(level + 1))
             }
         return SeedLiquidity(offers + bids)
     }

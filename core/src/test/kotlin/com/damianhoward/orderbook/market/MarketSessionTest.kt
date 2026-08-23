@@ -16,8 +16,8 @@ class MarketSessionTest {
     private val seed =
         SeedLiquidity(
             listOf(
-                SeedOrder(Price.of("101.00"), Side.OFFER, 5),
-                SeedOrder(Price.of("99.00"), Side.BID, 5),
+                SeedOrder(Price.of("101.00"), Side.OFFER, 5, Owner("mm-seed")),
+                SeedOrder(Price.of("99.00"), Side.BID, 5, Owner("mm-seed")),
             ),
         )
 
@@ -222,5 +222,31 @@ class MarketSessionTest {
         // Replayed under the recorded owners the two cross; under one owner they would not, which
         // is the divergence the owner is recorded to prevent.
         assertEquals(2, replay(seed, log).tape.size + 1, "the replayed book prints the same fill")
+    }
+
+    /**
+     * The opening ladder belongs to market makers, not to the venue. An exchange matches orders; it
+     * does not take the other side of them, and a book whose liquidity belonged to whoever ran it
+     * would be describing a dealer. Several makers rather than one is the same point, and it is
+     * what gives self-match prevention something to protect.
+     */
+    @Test
+    fun `the seeded ladder is quoted by several named makers, not by the venue`() {
+        val makers =
+            SeedLiquidity
+                .default()
+                .orders
+                .map { it.maker }
+                .toSet()
+
+        assertTrue(makers.size > 1, "one owner quoting the whole book is a dealer, not an exchange")
+        assertTrue(makers.none { it.id.contains("house") || it.id.contains("venue") }, "the venue is not a counterparty")
+
+        // No maker quotes both sides at the same level, which is the one arrangement that would
+        // have a ladder repeatedly cancelling its own liquidity.
+        SeedLiquidity.default().orders.groupBy { it.maker }.forEach { (maker, quotes) ->
+            val bothSidesAtOneLevel = quotes.groupBy { it.price }.values.any { it.map { q -> q.side }.distinct().size > 1 }
+            assertTrue(!bothSidesAtOneLevel, "$maker quotes both sides at one price")
+        }
     }
 }

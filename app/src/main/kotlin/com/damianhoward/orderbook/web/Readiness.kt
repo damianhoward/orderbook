@@ -183,10 +183,10 @@ class Readiness(
                         val book = session.snapshot()
                         check(book.bids.isNotEmpty() && book.asks.isNotEmpty()) { "seeded book has an empty side" }
                         // A party of its own, and it must stay one. The liquidity this probe is
-                        // about to lift is Owner.HOUSE, and self-match prevention will not fill an
-                        // order against another of the same owner — so probing as the house would
-                        // cancel the ask instead of trading with it, and this check would report a
-                        // broken matching engine on a working one.
+                        // about to lift belongs to a market maker, and self-match prevention will
+                        // not fill an order against another of the same owner — so probing as one of
+                        // them would cancel the ask instead of trading with it, and this check would
+                        // report a broken matching engine on a working one.
                         val probe = Owner("readiness-probe")
                         check(session.submit(Side.BID, book.asks.first().price, 1, probe).matched > 0) {
                             "matching engine did not fill a marketable order"

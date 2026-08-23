@@ -1,5 +1,6 @@
 package com.damianhoward.orderbook.market
 
+import com.damianhoward.orderbook.model.Owner
 import com.damianhoward.orderbook.model.Price
 import com.damianhoward.orderbook.model.Side
 import com.damianhoward.orderbook.model.TRADER
@@ -72,7 +73,7 @@ class ConcurrencyStressTest {
         // Aggressive buys against a seeded ladder. Every fill must correspond to real resting size,
         // so no print can exceed the resting order it took — which a torn match would violate.
         val offerSize = 5L
-        val ladder = (100..119).map { SeedOrder(price(it), Side.OFFER, offerSize) }
+        val ladder = (100..119).map { SeedOrder(price(it), Side.OFFER, offerSize, Owner("mm-seed")) }
         val session = MarketSession(seed = SeedLiquidity(ladder), tapeLimit = 10_000)
         val threads = 6
         val submitsPerThread = 40

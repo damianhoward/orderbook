@@ -34,7 +34,7 @@ import java.util.concurrent.atomic.AtomicLong
 @BenchmarkMode(Mode.SampleTime)
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
 open class MatchingEngineBenchmark {
-    // One participant for the whole benchmark; distinct from Owner.HOUSE so nothing measured here
+    // One participant for the whole benchmark; distinct from the maker owning the resting book, so
     // is cancelled by self-match prevention instead of matching. NOW is fixed so no order expires.
     private val bench = Owner("bench")
     private val now = 1_000_000L
@@ -61,9 +61,9 @@ open class MatchingEngineBenchmark {
         nextId.set(prepopulated.toLong())
         for (i in 0 until prepopulated) {
             val side = nextSide(i.toLong())
-            // The resting book belongs to the house; the aggressor below is bench. Same owner on
-            // both sides would have this measure self-match cancellation instead of the fill loop.
-            book.addOrder(Order(i.toLong(), priceFor(side, i.toLong(), priceLevels), side, RESTING_SIZE, Owner.HOUSE))
+            // The resting book belongs to a maker; the aggressor below is someone else. The same
+            // owner on both sides would measure self-match cancellation, not the fill loop.
+            book.addOrder(Order(i.toLong(), priceFor(side, i.toLong(), priceLevels), side, RESTING_SIZE, Owner("mm-bench")))
         }
     }
 
@@ -76,7 +76,7 @@ open class MatchingEngineBenchmark {
     fun submitCrossingTopOfBook(bh: Blackhole) {
         val incoming = Order(nextId.incrementAndGet(), bestOfferPrice, Side.BID, RESTING_SIZE, bench)
         bh.consume(engine.submit(incoming, now))
-        book.addOrder(Order(nextId.incrementAndGet(), bestOfferPrice, Side.OFFER, RESTING_SIZE, Owner.HOUSE))
+        book.addOrder(Order(nextId.incrementAndGet(), bestOfferPrice, Side.OFFER, RESTING_SIZE, Owner("mm-bench")))
     }
 
     /**

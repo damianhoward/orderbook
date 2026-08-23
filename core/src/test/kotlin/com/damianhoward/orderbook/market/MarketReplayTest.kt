@@ -1,5 +1,6 @@
 package com.damianhoward.orderbook.market
 
+import com.damianhoward.orderbook.model.Owner
 import com.damianhoward.orderbook.model.Price
 import com.damianhoward.orderbook.model.Side
 import com.damianhoward.orderbook.model.TRADER
@@ -12,8 +13,8 @@ class MarketReplayTest {
     private val seed =
         SeedLiquidity(
             listOf(
-                SeedOrder(Price.of("101.00"), Side.OFFER, 5),
-                SeedOrder(Price.of("99.00"), Side.BID, 5),
+                SeedOrder(Price.of("101.00"), Side.OFFER, 5, Owner("mm-seed")),
+                SeedOrder(Price.of("99.00"), Side.BID, 5, Owner("mm-seed")),
             ),
         )
 

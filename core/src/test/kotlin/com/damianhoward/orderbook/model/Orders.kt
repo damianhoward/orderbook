@@ -46,8 +46,8 @@ internal fun ownerOf(orderId: Long): Owner = Owner("trader-$orderId")
 
 /**
  * A participant for session-level tests, which do not choose their own order ids. Distinct from
- * [Owner.HOUSE] on purpose: the house owns the seeded ladder, and an order from the house would be
- * cancelled by self-match prevention rather than trading with it — so a test that means to trade
- * against the seeded book has to be someone else, or it silently stops testing what it claims to.
+ * every maker quoting the seeded ladder on purpose: an order from one of them would be cancelled by
+ * self-match prevention rather than trading, so a test that means to trade against the seeded book
+ * has to be someone else, or it silently stops testing what it claims to.
  */
 internal val TRADER = Owner("test-trader")

@@ -39,8 +39,8 @@ class KafkaEgressIntegrationTest {
     private val seed =
         SeedLiquidity(
             listOf(
-                SeedOrder(Price.of("101.00"), Side.OFFER, 5),
-                SeedOrder(Price.of("99.00"), Side.BID, 5),
+                SeedOrder(Price.of("101.00"), Side.OFFER, 5, Owner("mm-seed")),
+                SeedOrder(Price.of("99.00"), Side.BID, 5, Owner("mm-seed")),
             ),
         )
 

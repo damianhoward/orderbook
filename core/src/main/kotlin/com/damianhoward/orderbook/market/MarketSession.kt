@@ -56,7 +56,7 @@ interface Market {
      * [owner] has no default on purpose: every order belongs to someone, and a default would hand
      * that answer to a caller who never asked the question. It also decides who this order can
      * trade with — self-match prevention will not fill it against another order of the same owner,
-     * so seeded liquidity ([Owner.HOUSE]) and whoever is trading against it must differ.
+     * so a caller trading against the seeded ladder must not be one of the makers quoting it.
      */
     fun submit(
         side: Side,
@@ -213,7 +213,7 @@ class MarketSession(
     }
 
     private fun place(orders: List<SeedOrder>) =
-        orders.forEach { book.addOrder(Order(nextId.getAndIncrement(), it.price, it.side, it.size, Owner.HOUSE)) }
+        orders.forEach { book.addOrder(Order(nextId.getAndIncrement(), it.price, it.side, it.size, it.maker)) }
 
     /**
      * Runs [block] on the owning thread and returns its result. The block's own exception propagates
