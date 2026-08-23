@@ -15,5 +15,5 @@ jobs:
     uses: damianhoward/.github/.github/workflows/release.yml@main
     with:
       build-command: clean build
-      # Notes only: this repository is deployed from main, and trading-system consumes its core
+      # Notes only: this repository is deployed from main, and position-ledger consumes its core
       # module through JitPack, which builds the artifact from the tag itself.

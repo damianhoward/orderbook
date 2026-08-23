@@ -81,7 +81,7 @@ class Readiness(
      *
      * There is no separate gauge for the matching self-check. It is the only readiness condition
      * this service has, so a second series would restate `orderbook_ready` under another name and
-     * invite the two to drift apart in a dashboard. `trading-system` publishes per-condition gauges
+     * invite the two to drift apart in a dashboard. `position-ledger` publishes per-condition gauges
      * because it aggregates several; here the verdict and the condition are the same fact.
      *
      * The counters are absent rather than zero when no producer is wired, matching `/readyz`.
