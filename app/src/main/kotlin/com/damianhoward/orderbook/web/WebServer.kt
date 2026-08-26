@@ -328,6 +328,10 @@ fun main() {
                 commandsTopic = System.getenv("KAFKA_COMMANDS_TOPIC") ?: KafkaMarketEgress.DEFAULT_COMMANDS_TOPIC,
                 l2Topic = System.getenv("KAFKA_L2_TOPIC") ?: KafkaMarketEgress.DEFAULT_L2_TOPIC,
                 scram = ScramCredentials.fromEnv(System.getenv()),
+                // The broker CA, and with it TLS. Deployment decides: the broker offers the
+                // authenticated listener with and without encryption, on separate ports, so the
+                // bootstrap address and this variable move together or not at all.
+                caCertificate = System.getenv("KAFKA_SSL_CA_CERTIFICATE")?.takeUnless { it.isBlank() },
             )
         }
     // The book anchors once, at session creation, to this quote's last price — see QuoteSeed.

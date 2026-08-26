@@ -12,6 +12,7 @@ import org.apache.kafka.clients.producer.Producer
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.config.SaslConfigs
+import org.apache.kafka.common.config.SslConfigs
 import org.apache.kafka.common.serialization.StringSerializer
 import java.time.Duration
 import java.util.Properties
@@ -279,23 +280,41 @@ class KafkaMarketEgress(
         /** A started egress over a real [KafkaProducer]. The timeouts are tightened from the
          * defaults so a dead broker surfaces as counted failures within seconds instead of
          * buffering silently for two minutes. With [scram] the producer authenticates over
-         * SASL_PLAINTEXT/SCRAM-SHA-256; without it the connection is unauthenticated plaintext. */
+         * SCRAM-SHA-256; without it the connection is unauthenticated plaintext. [caCertificate]
+         * adds transport encryption to that — see [producerProperties]. */
         fun create(
             bootstrapServers: String,
             fillsTopic: String = DEFAULT_FILLS_TOPIC,
             commandsTopic: String = DEFAULT_COMMANDS_TOPIC,
             l2Topic: String = DEFAULT_L2_TOPIC,
             scram: ScramCredentials? = null,
+            caCertificate: String? = null,
         ): KafkaMarketEgress {
-            val producer = KafkaProducer(producerProperties(bootstrapServers, scram), StringSerializer(), StringSerializer())
+            val properties = producerProperties(bootstrapServers, scram, caCertificate)
+            val producer = KafkaProducer(properties, StringSerializer(), StringSerializer())
             return KafkaMarketEgress(producer, fillsTopic, commandsTopic, l2Topic).also { it.start() }
         }
 
+        /**
+         * [caCertificate] is a path to the PEM holding the broker CA. Present, the connection is
+         * SASL_SSL and the broker's certificate is checked against that CA and against the address
+         * dialled; absent, it is SASL_PLAINTEXT, which authenticates but sends every record in the
+         * clear. Both are configurations the broker offers, on separate listeners, so which one
+         * this is depends on deployment rather than on the build.
+         *
+         * Encryption without authentication is refused rather than configured. It is not a
+         * arrangement the broker offers, so it can only be a half-finished edit to the environment,
+         * and the failure it would otherwise produce is a handshake error at the first fill.
+         */
         internal fun producerProperties(
             bootstrapServers: String,
             scram: ScramCredentials?,
-        ): Properties =
-            Properties().apply {
+            caCertificate: String? = null,
+        ): Properties {
+            require(scram != null || caCertificate == null) {
+                "KAFKA_SSL_CA_CERTIFICATE is set without SASL credentials; the broker has no listener that offers one without the other"
+            }
+            return Properties().apply {
                 put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers)
                 put(ProducerConfig.CLIENT_ID_CONFIG, "orderbook-egress")
                 put(ProducerConfig.LINGER_MS_CONFIG, 5)
@@ -305,7 +324,10 @@ class KafkaMarketEgress(
                 // 8 MB, not the 32 MB default — the producer lives inside a 256 MB live-server heap.
                 put(ProducerConfig.BUFFER_MEMORY_CONFIG, 8L * 1024 * 1024)
                 if (scram != null) {
-                    put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, "SASL_PLAINTEXT")
+                    put(
+                        CommonClientConfigs.SECURITY_PROTOCOL_CONFIG,
+                        if (caCertificate != null) "SASL_SSL" else "SASL_PLAINTEXT",
+                    )
                     put(SaslConfigs.SASL_MECHANISM, "SCRAM-SHA-256")
                     put(
                         SaslConfigs.SASL_JAAS_CONFIG,
@@ -313,7 +335,20 @@ class KafkaMarketEgress(
                             "username=${jaasQuote(scram.username)} password=${jaasQuote(scram.password)};",
                     )
                 }
+                if (caCertificate != null) {
+                    // PEM, so the trust anchor is the file the estate issued rather than a JKS built
+                    // from it by a step nobody re-runs. One certificate, not a system trust store:
+                    // this producer talks to one broker, and a public CA has no business vouching
+                    // for it.
+                    put(SslConfigs.SSL_TRUSTSTORE_TYPE_CONFIG, "PEM")
+                    put(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, caCertificate)
+                    // Left at the default deliberately. Hostname verification is what makes the CA
+                    // check mean something: without it any certificate that CA ever signed is
+                    // accepted for any address, and the broker's carries an IP SAN precisely so
+                    // this can stay on.
+                }
             }
+        }
 
         // JAAS values are double-quoted strings; escape the two characters that break out of one.
         private fun jaasQuote(value: String): String = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
