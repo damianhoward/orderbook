@@ -12,6 +12,7 @@ import org.apache.kafka.common.serialization.StringSerializer
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import java.time.Duration
 
 class KafkaMarketEgressTest {
@@ -346,5 +347,57 @@ class KafkaMarketEgressTest {
                 """username="user" password="p\"w\\d";""",
             props["sasl.jaas.config"],
         )
+    }
+
+    @Test
+    fun `with a CA certificate the producer authenticates over SASL_SSL and trusts only that CA`() {
+        val props =
+            KafkaMarketEgress.producerProperties(
+                "10.0.0.91:9095",
+                ScramCredentials("orderbook-egress", "s3cret"),
+                caCertificate = "/etc/orderbook/broker-ca.pem",
+            )
+        assertEquals("SASL_SSL", props["security.protocol"])
+        assertEquals("SCRAM-SHA-256", props["sasl.mechanism"])
+        assertEquals("PEM", props["ssl.truststore.type"])
+        assertEquals("/etc/orderbook/broker-ca.pem", props["ssl.truststore.location"])
+    }
+
+    @Test
+    fun `hostname verification is left on so the CA check constrains the address as well`() {
+        val props =
+            KafkaMarketEgress.producerProperties(
+                "10.0.0.91:9095",
+                ScramCredentials("orderbook-egress", "s3cret"),
+                caCertificate = "/etc/orderbook/broker-ca.pem",
+            )
+        // Absent means the client default, which is `https`. Set to "" it would accept any
+        // certificate the CA ever signed for any address, which is the usual way a private CA
+        // stops being a control.
+        assertEquals(null, props["ssl.endpoint.identification.algorithm"])
+    }
+
+    @Test
+    fun `without a CA certificate the authenticated connection stays SASL_PLAINTEXT`() {
+        val props =
+            KafkaMarketEgress.producerProperties(
+                "10.0.0.91:9094",
+                ScramCredentials("orderbook-egress", "s3cret"),
+            )
+        assertEquals("SASL_PLAINTEXT", props["security.protocol"])
+        assertEquals(null, props["ssl.truststore.location"])
+    }
+
+    @Test
+    fun `a CA certificate without credentials is refused rather than half configured`() {
+        val thrown =
+            assertThrows<IllegalArgumentException> {
+                KafkaMarketEgress.producerProperties(
+                    "10.0.0.91:9095",
+                    scram = null,
+                    caCertificate = "/etc/orderbook/broker-ca.pem",
+                )
+            }
+        assertTrue(thrown.message!!.contains("without SASL credentials"))
     }
 }

@@ -140,7 +140,8 @@ The egress is off unless the environment wires it:
 - `KAFKA_BOOTSTRAP_SERVERS` — setting it enables the egress; unset, no producer exists
 - `KAFKA_FILLS_TOPIC` / `KAFKA_COMMANDS_TOPIC` / `KAFKA_L2_TOPIC` — topic overrides (defaults `orderbook.fills`, `orderbook.commands`, `orderbook.l2`)
 - The record key is whichever symbol's book produced the event — one shared producer serves every open session (`/api/{symbol}/...`)
-- `KAFKA_SASL_USERNAME` / `KAFKA_SASL_PASSWORD` — set together, the producer authenticates over SASL_PLAINTEXT with SCRAM-SHA-256; unset, the connection is plaintext. Setting only one fails at startup rather than silently producing to nowhere.
+- `KAFKA_SASL_USERNAME` / `KAFKA_SASL_PASSWORD` — set together, the producer authenticates with SCRAM-SHA-256; unset, the connection is unauthenticated. Setting only one fails at startup rather than silently producing to nowhere.
+- `KAFKA_SSL_CA_CERTIFICATE` — path to a PEM holding the broker's CA. Set, the connection is `SASL_SSL` and the broker's certificate is verified against that CA and against the address dialled; unset, it is `SASL_PLAINTEXT`, which authenticates but sends records in the clear. Set without credentials it fails at startup, because no listener offers encryption without authentication.
 
 `KafkaEgressIntegrationTest` exercises all three topics against a real broker (Testcontainers) on every CI run. `MarketSessionBenchmark` measures `submit()` with the egress attached vs absent; the producer I/O runs on the egress thread, so the submit path pays only the enqueues.
 
