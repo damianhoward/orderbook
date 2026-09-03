@@ -58,7 +58,8 @@ fun interface NativeMemorySource {
  */
 class JfrNativeMemory private constructor(
     private val stream: RecordingStream,
-) : NativeMemorySource, AutoCloseable {
+) : NativeMemorySource,
+    AutoCloseable {
     private val latest = ConcurrentHashMap<String, NativeMemoryUsage>()
 
     override fun readings(): Map<String, NativeMemoryUsage> = latest.toMap()
