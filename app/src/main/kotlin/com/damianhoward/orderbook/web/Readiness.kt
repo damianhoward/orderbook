@@ -178,6 +178,10 @@ class Readiness(
          */
         fun matchingEngine(egress: EgressMetrics? = null): Readiness =
             Readiness(
+                // Started here rather than defaulted inside ProcessMetrics, so that constructing
+                // one in a test does not start a Flight Recorder thread as a side effect. This
+                // factory is the one place that runs in production and nowhere else.
+                process = ProcessMetrics(nativeMemory = JfrNativeMemory.startOrNone()),
                 selfCheck = {
                     MarketSession().use { session ->
                         val book = session.snapshot()

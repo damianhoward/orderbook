@@ -63,14 +63,17 @@ class ProcessMetricsTest {
         override fun getObjectName(): ObjectName = ObjectName("java.lang:type=MemoryPool,name=stub")
     }
 
-    private fun metricsWith(pools: List<MemoryPoolMXBean>) =
-        ProcessMetrics(
-            runtime = ManagementFactory.getRuntimeMXBean(),
-            memory = ManagementFactory.getMemoryMXBean(),
-            threads = ManagementFactory.getThreadMXBean(),
-            collectors = ManagementFactory.getGarbageCollectorMXBeans(),
-            pools = pools,
-        ).render()
+    private fun metricsWith(
+        pools: List<MemoryPoolMXBean>,
+        nativeMemory: NativeMemorySource = NativeMemorySource.NONE,
+    ) = ProcessMetrics(
+        runtime = ManagementFactory.getRuntimeMXBean(),
+        memory = ManagementFactory.getMemoryMXBean(),
+        threads = ManagementFactory.getThreadMXBean(),
+        collectors = ManagementFactory.getGarbageCollectorMXBeans(),
+        pools = pools,
+        nativeMemory = nativeMemory,
+    ).render()
 
     private fun usage(used: Long) = MemoryUsage(0, used, used, used)
 
@@ -157,6 +160,62 @@ class ProcessMetricsTest {
                 .map { it.split(' ')[2] }
                 .toList()
         assertEquals(names.size, names.toSet().size, names.toString())
+    }
+
+    @Test
+    fun `native memory is absent, not zero, when nothing is tracking it`() {
+        // The same distinction the live set makes. A process started without native memory tracking
+        // has no answer, and zero would be a claim that it holds nothing outside its heap.
+        val metrics = metricsWith(listOf(Pool(MemoryType.HEAP, peak = 100, collection = usage(30))))
+        assertFalse(metrics.contains("orderbook_jvm_native_committed_bytes"), metrics)
+    }
+
+    @Test
+    fun `native memory publishes committed per category, in a stable order`() {
+        val metrics =
+            metricsWith(
+                pools = listOf(Pool(MemoryType.HEAP, peak = 100, collection = usage(30))),
+                nativeMemory =
+                    NativeMemorySource {
+                        mapOf(
+                            "Thread" to NativeMemoryUsage(reserved = 20_000, committed = 7_000),
+                            "Class" to NativeMemoryUsage(reserved = 1_000_000, committed = 3_000),
+                        )
+                    },
+            )
+        assertTrue(metrics.contains("""orderbook_jvm_native_committed_bytes{category="Class"} 3000"""), metrics)
+        assertTrue(metrics.contains("""orderbook_jvm_native_committed_bytes{category="Thread"} 7000"""), metrics)
+        // Ordering is fixed so that diffing two scrapes shows changed values rather than moved lines.
+        assertTrue(metrics.indexOf("""category="Class"""") < metrics.indexOf("""category="Thread""""), metrics)
+    }
+
+    @Test
+    fun `reserved is not published beside committed`() {
+        // Reserved is address space claimed and mostly not taken — the class space alone reserves a
+        // gigabyte on a process holding a hundred megabytes — so a series carrying it would read as
+        // consumption that is not there.
+        val metrics =
+            metricsWith(
+                pools = listOf(Pool(MemoryType.HEAP, peak = 100, collection = usage(30))),
+                nativeMemory =
+                    NativeMemorySource {
+                        mapOf("Class" to NativeMemoryUsage(reserved = 1_000_000, committed = 3_000))
+                    },
+            )
+        assertFalse(metrics.contains("native_reserved"), metrics)
+    }
+
+    @Test
+    fun `starting the recorder cannot stop the endpoint answering`() {
+        // The contract is that instrumentation does not decide whether the service runs, so what is
+        // asserted is the shape of either outcome: a source comes back whether Flight Recorder was
+        // available or not, and rendering with it still produces the rest of the series.
+        val source = JfrNativeMemory.startOrNone()
+        try {
+            assertTrue(ProcessMetrics(nativeMemory = source).render().contains("orderbook_jvm_threads"), "rendered")
+        } finally {
+            (source as? AutoCloseable)?.close()
+        }
     }
 
     private fun valueOf(
