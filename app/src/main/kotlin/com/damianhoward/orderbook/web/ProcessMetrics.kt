@@ -35,6 +35,13 @@ import java.lang.management.ThreadMXBean
  * collection above was reaching for. A ceiling wants the live set plus room for the collector to
  * work, and the two gauges are those two facts kept apart rather than averaged into one that is
  * neither.
+ *
+ * Both of those describe the heap, which is the minority of what this process occupies — its live
+ * set is single-digit megabytes and the process holds well over a hundred. So the ceiling gauges
+ * answer "is the heap sized right" and cannot answer "why is this process growing", which is a
+ * different question and the one that has actually needed answering. [NativeMemorySource] supplies
+ * the rest, by the category the JVM allocated it under, and it is absent rather than zero wherever
+ * native memory is not being tracked.
  */
 class ProcessMetrics(
     private val runtime: RuntimeMXBean = ManagementFactory.getRuntimeMXBean(),
@@ -42,6 +49,9 @@ class ProcessMetrics(
     private val threads: ThreadMXBean = ManagementFactory.getThreadMXBean(),
     private val collectors: List<GarbageCollectorMXBean> = ManagementFactory.getGarbageCollectorMXBeans(),
     pools: List<MemoryPoolMXBean> = ManagementFactory.getMemoryPoolMXBeans(),
+    // Defaults to answering nothing, so a caller that has not started a recorder — and every test
+    // that is not about this — publishes exactly what it did before.
+    private val nativeMemory: NativeMemorySource = NativeMemorySource.NONE,
 ) {
     // Heap pools only. Metaspace and the code cache are memory this process occupies and neither is
     // governed by the heap ceiling, so summing them here would inflate a number whose whole purpose
@@ -149,6 +159,25 @@ class ProcessMetrics(
             "Seconds each garbage collector has spent collecting.",
             "counter",
             collectors.map { """{gc=${quote(it.name)}}""" to seconds(it.collectionTime) },
+        )
+
+        // Committed only, not reserved. Reserved is address space the JVM has claimed and mostly
+        // has not taken — the class space alone reserves a gigabyte on a process holding a hundred
+        // megabytes — so publishing it would add a series that looks like consumption and is not.
+        // Committed is the quantity a box's memory has to cover.
+        //
+        // The category is a label rather than part of the name because the set is fixed by the JVM
+        // and not drawn from anything this service handles, which is the same reason the collector
+        // names above are labels. A label taken from data mints a series per observation and the
+        // collector keeps it forever.
+        //
+        // Sorted so a diff between two scrapes is a diff in values rather than in ordering.
+        val native = nativeMemory.readings()
+        emit(
+            "${PREFIX}jvm_native_committed_bytes",
+            "Memory the JVM has committed outside the heap, by the category that asked for it.",
+            "gauge",
+            native.entries.sortedBy { it.key }.map { """{category=${quote(it.key)}}""" to it.value.committed },
         )
 
         return out.toString()
