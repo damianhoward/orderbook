@@ -18,4 +18,4 @@ permissions:
 
 jobs:
   pr-body:
-    uses: damianhoward/.github/.github/workflows/pr-body-scan.yml@main
+    uses: damianhoward/.github/.github/workflows/pr-body-scan.yml@runner-ubuntu-26-04

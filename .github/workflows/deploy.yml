@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   deploy:
-    uses: damianhoward/.github/.github/workflows/deploy.yml@main
+    uses: damianhoward/.github/.github/workflows/deploy.yml@runner-ubuntu-26-04
     with:
       app: orderbook
       dist-module: app

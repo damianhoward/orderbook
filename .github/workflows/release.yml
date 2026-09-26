@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   release:
-    uses: damianhoward/.github/.github/workflows/release.yml@main
+    uses: damianhoward/.github/.github/workflows/release.yml@runner-ubuntu-26-04
     with:
       build-command: clean build
       # Notes only: this repository is deployed from main, and position-ledger consumes its core
