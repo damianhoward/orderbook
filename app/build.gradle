@@ -33,8 +33,7 @@ dependencies {
     // Real-broker integration test for the fills egress; skipped where Docker is absent, runs in CI.
     testImplementation deps.testcontainers.junit.jupiter
     testImplementation deps.testcontainers.kafka
-    // Same version as the estate's other browser tests (risk-engine, visitor-analytics).
-    testImplementation 'com.microsoft.playwright:playwright:1.61.0'
+    testImplementation deps.playwright
 }
 
 // Downloads the Chromium build OrderBookBrowserTest drives (a no-op when already present).
