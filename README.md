@@ -244,7 +244,7 @@ price levels on this side", distinct from a legitimate price of zero.
 
 ## Stack
 
-- Kotlin 2.3.21 (JVM target 25)
+- Kotlin 2.4.20 (JVM target 25)
 - Java 25 toolchain
 - Kafka clients 4.3 (fills egress)
 - JUnit Jupiter 6.1
