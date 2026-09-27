@@ -1,19 +1,15 @@
 // The order-book library: book, engine, model, market, view - plus the JMH benchmarks that
-// measure it. No web, no Kafka, no entry point; this is the module published for consumers
-// (JitPack builds it from a tag), and its only runtime dependency is the Disruptor.
+// measure it. No web, no Kafka, no entry point; this is the module published for consumers, on
+// Maven Central as com.damianhoward:orderbook, and its only runtime dependency is the Disruptor.
 plugins {
     id 'com.damianhoward.kotlin-conventions'
     id 'java-library'
     id 'me.champeau.jmh'
-    id 'maven-publish'
+    id 'com.vanniktech.maven.publish'
 }
 
 group = 'com.damianhoward'
-version = '3.0.0'
-
-java {
-    withSourcesJar() // so a consumer's IDE can navigate the source
-}
+version = '3.0.2'
 
 dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
@@ -36,15 +32,41 @@ jmh {
     resultsFile = project.file("${buildDir}/reports/jmh/results.json")
 }
 
-// No remote repository: JitPack builds from the git tag, so publishing exists only for
-// publishToMavenLocal (local verification and a consumer dry run).
-publishing {
-    publications {
-        maven(MavenPublication) {
-            from components.java
-            // Not the bare project name 'core': both this repo and risk-engine publish a :core,
-            // and the artifactId is what keeps them distinct in a local repository.
-            artifactId = 'orderbook-core'
+// Published to Maven Central by the release workflow when a version is tagged. Central requires
+// sources, a javadoc jar and a complete POM, and refuses the upload without them.
+mavenPublishing {
+    configure(new com.vanniktech.maven.publish.KotlinJvm(new com.vanniktech.maven.publish.JavadocJar.Empty(), true))
+    // The repository's name rather than the module's: consumers depend on the order book, and
+    // "core" says nothing outside this build.
+    coordinates('com.damianhoward', 'orderbook', version.toString())
+    publishToMavenCentral(true)
+    // Signed where the release workflow supplies a key; it arrives empty everywhere else.
+    if (!providers.gradleProperty('signingInMemoryKey').getOrElse('').isBlank()) {
+        signAllPublications()
+    }
+    pom {
+        name = 'orderbook'
+        description = 'A price-time priority limit order book and matching engine.'
+        url = 'https://github.com/damianhoward/orderbook'
+        inceptionYear = '2026'
+        licenses {
+            license {
+                name = 'The Apache License, Version 2.0'
+                url = 'https://www.apache.org/licenses/LICENSE-2.0.txt'
+                distribution = 'repo'
+            }
+        }
+        developers {
+            developer {
+                id = 'damianhoward'
+                name = 'Damian Howard'
+                url = 'https://github.com/damianhoward'
+            }
+        }
+        scm {
+            url = 'https://github.com/damianhoward/orderbook'
+            connection = 'scm:git:https://github.com/damianhoward/orderbook.git'
+            developerConnection = 'scm:git:ssh://git@github.com/damianhoward/orderbook.git'
         }
     }
 }
