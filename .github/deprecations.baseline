@@ -18,3 +18,9 @@ WARNING: A restricted method in java.lang.System has been called
 WARNING: Restricted methods will be blocked in a future release unless native access is enabled
 WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
 WARNING: java.lang.System::load has been called by com.sun.jna.Native in an unnamed module
+
+# The JMH plugin, from Gradle 9.8. JMHPlugin.configureJmhRuntimeClasspathConfiguration calls
+# setVisible(false) on the configuration it creates; 0.7.3 is the latest release and its master
+# still does. Gradle 11 removes the method, so the plugin has to change before that upgrade or be
+# replaced by a hand-wired jmh source set. Delete this line when a plugin release stops emitting it.
+The Configuration.setVisible(boolean) method has been deprecated. This is scheduled to be removed in Gradle 11. Consult the upgrading guide for further information: https:docs.gradle.org/VERSION/userguide/upgrading_version_9.html#deprecate-visible-property
