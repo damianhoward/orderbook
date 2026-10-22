@@ -4,6 +4,8 @@ import com.damianhoward.orderbook.kafka.EgressMetrics
 import com.damianhoward.orderbook.market.MarketSession
 import com.damianhoward.orderbook.model.Owner
 import com.damianhoward.orderbook.model.Side
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 
 /**
  * The order book's operational truth, rendered for `/readyz` and `/metrics`. `/healthz` proves the
@@ -71,10 +73,7 @@ class Readiness(
 
     fun probe(): Probe {
         val now = snapshot()
-        return Probe(
-            now.ready,
-            """{"ready":${now.ready},"match":{"ok":${now.ready}},"egress":${egressJson(now.egress)}}""",
-        )
+        return Probe(now.ready, PROBE_JSON.encodeToString(ProbeBody(now.ready, Check(now.ready), egressBody(now.egress))))
     }
 
     /**
@@ -164,11 +163,29 @@ class Readiness(
     // Absent rather than a misleading zero when no producer is configured: "enabled":false says
     // nothing shipped because nothing was meant to, which is a different fact from shipping
     // nothing while trying to.
-    private fun egressJson(state: EgressState?): String =
-        state?.let {
-            """{"enabled":true,"published":${it.published},"failed":${it.failed},""" +
-                """"dropped":${it.dropped},"lost":${it.lost}}"""
-        } ?: """{"enabled":false}"""
+    private fun egressBody(state: EgressState?): EgressBody =
+        state?.let { EgressBody(enabled = true, it.published, it.failed, it.dropped, it.lost) } ?: EgressBody(enabled = false)
+
+    @Serializable
+    private class ProbeBody(
+        private val ready: Boolean,
+        private val match: Check,
+        private val egress: EgressBody,
+    )
+
+    @Serializable
+    private class Check(
+        private val ok: Boolean,
+    )
+
+    @Serializable
+    private class EgressBody(
+        private val enabled: Boolean,
+        private val published: Long? = null,
+        private val failed: Long? = null,
+        private val dropped: Long? = null,
+        private val lost: Long? = null,
+    )
 
     companion object {
         /**
@@ -201,3 +218,7 @@ class Readiness(
             )
     }
 }
+
+// The counters are absent, not null, when no egress is configured; the probe keeps the same
+// {"enabled":false} body it has always had.
+private val PROBE_JSON = Json { explicitNulls = false }

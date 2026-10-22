@@ -1,5 +1,8 @@
 package com.damianhoward.orderbook.web
 
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+
 /**
  * The symbols suggested in the picker's dropdown — a small, sector-varied set so nobody needs to
  * already know a ticker. Free-text entry for any other real listed symbol still works; this list
@@ -22,10 +25,11 @@ object CuratedSymbols {
             "WMT" to "Walmart",
         )
 
-    fun toJson(): String =
-        ALL.joinToString(",", "[", "]") { (symbol, name) ->
-            """{"symbol":${jsonString(symbol)},"name":${jsonString(name)}}"""
-        }
+    fun toJson(): String = Json.encodeToString(ALL.map { (symbol, name) -> Listing(symbol, name) })
 
-    private fun jsonString(s: String): String = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+    @Serializable
+    private class Listing(
+        private val symbol: String,
+        private val name: String,
+    )
 }

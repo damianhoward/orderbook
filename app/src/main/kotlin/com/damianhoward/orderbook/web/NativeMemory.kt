@@ -1,6 +1,7 @@
 package com.damianhoward.orderbook.web
 
 import jdk.jfr.consumer.RecordingStream
+import org.slf4j.LoggerFactory
 import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
 
@@ -99,8 +100,10 @@ class JfrNativeMemory private constructor(
                 // is equally not a reason to break it. Narrowing this would mean listing the ways
                 // Flight Recorder can be unavailable and being wrong about one of them later.
             } catch (e: Exception) {
-                System.err.println("native memory tracking unavailable, publishing no native series: $e")
+                log.warn("Native memory tracking unavailable, publishing no native series", e)
                 NativeMemorySource.NONE
             }
     }
 }
+
+private val log = LoggerFactory.getLogger(JfrNativeMemory::class.java)
