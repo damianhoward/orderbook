@@ -6,6 +6,8 @@ import com.damianhoward.orderbook.market.FillListener
 import com.damianhoward.orderbook.market.SubmitCommand
 import com.damianhoward.orderbook.model.Trade
 import com.damianhoward.orderbook.view.MarketSnapshot
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.clients.producer.Producer
@@ -241,24 +243,39 @@ class KafkaMarketEgress(
 
     private fun fillJson(fill: PendingFill): String {
         val trade = fill.trade
-        return """{"v":1,"execId":${quote(fill.execId)},"symbol":${quote(fill.symbol)},""" +
-            """"price":${quote(trade.price.toString())},"size":${trade.size},""" +
-            """"makerOrderId":${trade.makerOrderId},"takerOrderId":${trade.takerOrderId},""" +
-            """"aggressor":${quote(trade.takerSide.name)},"ts":${fill.timeMillis}}"""
+        return Json.encodeToString(
+            FillMessage(
+                v = SCHEMA_VERSION,
+                execId = fill.execId,
+                symbol = fill.symbol,
+                price = trade.price.toString(),
+                size = trade.size,
+                makerOrderId = trade.makerOrderId,
+                takerOrderId = trade.takerOrderId,
+                aggressor = trade.takerSide.name,
+                ts = fill.timeMillis,
+            ),
+        )
     }
 
     private fun commandJson(pending: PendingCommand): String {
         val command = pending.command
-        return """{"v":1,"symbol":${quote(pending.symbol)},"side":${quote(command.side.name)},""" +
-            """"price":${quote(command.price.toString())},"size":${command.size},""" +
-            """"owner":${quote(command.owner.id)},"ts":${command.timeMillis}}"""
+        return Json.encodeToString(
+            CommandMessage(
+                v = SCHEMA_VERSION,
+                symbol = pending.symbol,
+                side = command.side.name,
+                price = command.price.toString(),
+                size = command.size,
+                owner = command.owner.id,
+                ts = command.timeMillis,
+            ),
+        )
     }
 
     // The book body comes from the view layer's serialisation; the egress adds only its envelope.
     private fun depthJson(pending: PendingDepth): String =
-        """{"v":1,"symbol":${quote(pending.symbol)},""" + pending.snapshot.depthJson().drop(1)
-
-    private fun quote(s: String): String = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+        """{"v":1,"symbol":${Json.encodeToString(pending.symbol)},""" + pending.snapshot.depthJson().drop(1)
 
     companion object {
         const val DEFAULT_FILLS_TOPIC = "orderbook.fills"
@@ -375,3 +392,34 @@ class SymbolEgress(
 
     override fun onDepth(snapshot: MarketSnapshot) = egress.depth(symbol, snapshot)
 }
+
+/*
+ * The published egress schema. Field order is the wire order and must not change: consumers parse
+ * by name, but the byte-exact tests pin what is on the topics today. `v` has no default because
+ * the encoder omits a property that holds its default, and every record must carry its version.
+ */
+@Serializable
+private data class FillMessage(
+    val v: Int,
+    val execId: String,
+    val symbol: String,
+    val price: String,
+    val size: Long,
+    val makerOrderId: Long,
+    val takerOrderId: Long,
+    val aggressor: String,
+    val ts: Long,
+)
+
+@Serializable
+private data class CommandMessage(
+    val v: Int,
+    val symbol: String,
+    val side: String,
+    val price: String,
+    val size: Long,
+    val owner: String,
+    val ts: Long,
+)
+
+private const val SCHEMA_VERSION = 1

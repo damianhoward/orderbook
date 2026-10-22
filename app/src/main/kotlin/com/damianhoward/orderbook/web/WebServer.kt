@@ -18,6 +18,9 @@ import com.damianhoward.orderbook.quote.QuoteSeed
 import com.damianhoward.orderbook.quote.toJson
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import org.slf4j.LoggerFactory
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.nio.charset.StandardCharsets
@@ -89,7 +92,7 @@ class WebServer(
         server.executor = executor
         server.createContext("/", ::route)
         server.start()
-        println("Order book server listening on :$boundPort")
+        log.info("Order book server listening on :{}", boundPort)
     }
 
     /** The port actually bound — differs from the requested one when 0 (ephemeral) was asked for. */
@@ -118,19 +121,18 @@ class WebServer(
                 else -> respond(exchange, 404, "text/plain", "not found")
             }
         } catch (e: UnknownSymbolException) {
-            respond(exchange, 404, "application/json", """{"error":${jsonString(e.message ?: "unknown symbol")}}""")
+            respond(exchange, 404, "application/json", errorJson(e.message ?: "unknown symbol"))
         } catch (e: IllegalArgumentException) {
-            respond(exchange, 400, "application/json", """{"error":${jsonString(e.message ?: "bad request")}}""")
+            respond(exchange, 400, "application/json", errorJson(e.message ?: "bad request"))
         } catch (e: BookAtCapacityException) {
             // The book is a bounded, resettable resource; a saturated one can't accept more resting
             // orders until it drains, so this is a 503, not a client error in the request itself.
-            respond(exchange, 503, "application/json", """{"error":${jsonString(e.message ?: "order book at capacity")}}""")
+            respond(exchange, 503, "application/json", errorJson(e.message ?: "order book at capacity"))
         } catch (e: Exception) {
             // Anything unexpected must still answer the request — without this the connection
-            // just closes with no status line. The stack goes to stderr -> journalctl; the
-            // response stays generic.
-            e.printStackTrace()
-            runCatching { respond(exchange, 500, "application/json", """{"error":"internal error"}""") }
+            // just closes with no status line. The stack goes to the log; the response stays generic.
+            log.error("Unhandled error serving {}", exchange.requestURI.path, e)
+            runCatching { respond(exchange, 500, "application/json", errorJson("internal error")) }
         }
     }
 
@@ -166,7 +168,7 @@ class WebServer(
                 get(exchange) {
                     val cached = quotes.latest(symbol)
                     if (cached == null) {
-                        respond(exchange, 503, "application/json", """{"error":"quote temporarily unavailable"}""")
+                        respond(exchange, 503, "application/json", errorJson("quote temporarily unavailable"))
                     } else {
                         respond(exchange, 200, "application/json", cached.quote.toJson())
                     }
@@ -186,7 +188,7 @@ class WebServer(
             handler()
         } else {
             exchange.responseHeaders.add("Retry-After", decision.retryAfterSeconds.toString())
-            respond(exchange, 429, "application/json", """{"error":"rate limit exceeded"}""")
+            respond(exchange, 429, "application/json", errorJson("rate limit exceeded"))
         }
     }
 
@@ -283,7 +285,12 @@ class WebServer(
         respond(exchange, if (probe.ready) 200 else 503, "application/json", probe.json)
     }
 
-    private fun jsonString(s: String): String = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+    private fun errorJson(message: String): String = Json.encodeToString(ErrorBody(message))
+
+    @Serializable
+    private data class ErrorBody(
+        val error: String,
+    )
 
     private fun respond(
         exchange: HttpExchange,
@@ -392,3 +399,5 @@ private const val QUOTE_REFRESH_INTERVAL_SECONDS = 30L
 // Twenty refresh cycles: a healthy 30s refresh keeps a quote far inside this, so it withholds a
 // displayed price only during a sustained provider outage, never in normal operation.
 private val QUOTE_MAX_AGE: Duration = Duration.ofMinutes(10)
+
+private val log = LoggerFactory.getLogger(WebServer::class.java)

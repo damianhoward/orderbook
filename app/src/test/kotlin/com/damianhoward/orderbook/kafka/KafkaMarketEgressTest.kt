@@ -7,6 +7,9 @@ import com.damianhoward.orderbook.model.Side
 import com.damianhoward.orderbook.model.Trade
 import com.damianhoward.orderbook.view.DepthLevel
 import com.damianhoward.orderbook.view.MarketSnapshot
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.apache.kafka.clients.producer.MockProducer
 import org.apache.kafka.common.serialization.StringSerializer
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -82,6 +85,19 @@ class KafkaMarketEgressTest {
             """{"v":1,"symbol":"SIM","side":"BID","price":"101.00000000","size":5,"owner":"taker","ts":1000}""",
             record.value(),
         )
+    }
+
+    @Test
+    fun `an owner with control characters still produces JSON a consumer can read back`() {
+        // The owner is whatever the client sent. The hand-rolled escaping this replaced handled
+        // only quote and backslash, so a newline published a record no JSON parser accepts.
+        val producer = producer()
+        val egress = KafkaMarketEgress(producer)
+        egress.submit("SIM", command.copy(owner = Owner("desk\none\t\"two\"")))
+        egress.close()
+
+        val record = Json.parseToJsonElement(producer.history().single().value()).jsonObject
+        assertEquals("desk\none\t\"two\"", record.getValue("owner").jsonPrimitive.content)
     }
 
     @Test
