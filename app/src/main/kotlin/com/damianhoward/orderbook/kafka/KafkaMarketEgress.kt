@@ -397,29 +397,31 @@ class SymbolEgress(
  * The published egress schema. Field order is the wire order and must not change: consumers parse
  * by name, but the byte-exact tests pin what is on the topics today. `v` has no default because
  * the encoder omits a property that holds its default, and every record must carry its version.
+ * Properties are private here and on every other wire class in this module: they are only ever
+ * written, and the serializer reads the fields.
  */
 @Serializable
-private data class FillMessage(
-    val v: Int,
-    val execId: String,
-    val symbol: String,
-    val price: String,
-    val size: Long,
-    val makerOrderId: Long,
-    val takerOrderId: Long,
-    val aggressor: String,
-    val ts: Long,
+private class FillMessage(
+    private val v: Int,
+    private val execId: String,
+    private val symbol: String,
+    private val price: String,
+    private val size: Long,
+    private val makerOrderId: Long,
+    private val takerOrderId: Long,
+    private val aggressor: String,
+    private val ts: Long,
 )
 
 @Serializable
-private data class CommandMessage(
-    val v: Int,
-    val symbol: String,
-    val side: String,
-    val price: String,
-    val size: Long,
-    val owner: String,
-    val ts: Long,
+private class CommandMessage(
+    private val v: Int,
+    private val symbol: String,
+    private val side: String,
+    private val price: String,
+    private val size: Long,
+    private val owner: String,
+    private val ts: Long,
 )
 
 private const val SCHEMA_VERSION = 1

@@ -288,8 +288,8 @@ class WebServer(
     private fun errorJson(message: String): String = Json.encodeToString(ErrorBody(message))
 
     @Serializable
-    private data class ErrorBody(
-        val error: String,
+    private class ErrorBody(
+        private val error: String,
     )
 
     private fun respond(

@@ -28,8 +28,8 @@ object CuratedSymbols {
     fun toJson(): String = Json.encodeToString(ALL.map { (symbol, name) -> Listing(symbol, name) })
 
     @Serializable
-    private data class Listing(
-        val symbol: String,
-        val name: String,
+    private class Listing(
+        private val symbol: String,
+        private val name: String,
     )
 }

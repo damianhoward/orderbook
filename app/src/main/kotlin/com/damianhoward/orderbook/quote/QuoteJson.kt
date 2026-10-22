@@ -22,14 +22,14 @@ fun Quote.toJson(): String =
 
 // Decimals travel as strings so the client shows exactly what was quoted, not a float's nearest.
 @Serializable
-private data class QuoteBody(
-    val symbol: String,
-    val name: String,
-    val exchange: String,
-    val currency: String,
-    val last: String,
-    val change: String,
-    val changePercent: String,
-    val marketOpen: Boolean,
-    val asOfMillis: Long,
+private class QuoteBody(
+    private val symbol: String,
+    private val name: String,
+    private val exchange: String,
+    private val currency: String,
+    private val last: String,
+    private val change: String,
+    private val changePercent: String,
+    private val marketOpen: Boolean,
+    private val asOfMillis: Long,
 )

@@ -167,24 +167,24 @@ class Readiness(
         state?.let { EgressBody(enabled = true, it.published, it.failed, it.dropped, it.lost) } ?: EgressBody(enabled = false)
 
     @Serializable
-    private data class ProbeBody(
-        val ready: Boolean,
-        val match: Check,
-        val egress: EgressBody,
+    private class ProbeBody(
+        private val ready: Boolean,
+        private val match: Check,
+        private val egress: EgressBody,
     )
 
     @Serializable
-    private data class Check(
-        val ok: Boolean,
+    private class Check(
+        private val ok: Boolean,
     )
 
     @Serializable
-    private data class EgressBody(
-        val enabled: Boolean,
-        val published: Long? = null,
-        val failed: Long? = null,
-        val dropped: Long? = null,
-        val lost: Long? = null,
+    private class EgressBody(
+        private val enabled: Boolean,
+        private val published: Long? = null,
+        private val failed: Long? = null,
+        private val dropped: Long? = null,
+        private val lost: Long? = null,
     )
 
     companion object {
