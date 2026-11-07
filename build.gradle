@@ -2,6 +2,6 @@
 // aggregate; :core and :app each apply kotlin-conventions and declare their own specifics.
 plugins {
     id 'com.damianhoward.root-conventions' version '0.6.0'
-    id 'me.champeau.jmh' version '0.7.3' apply false
+    id 'me.champeau.jmh' version '0.7.4' apply false
     id 'com.vanniktech.maven.publish' version '0.37.0' apply false
 }
