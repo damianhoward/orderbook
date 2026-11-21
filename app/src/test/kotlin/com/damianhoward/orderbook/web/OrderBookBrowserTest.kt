@@ -102,7 +102,7 @@ class OrderBookBrowserTest {
         live(page)
         assertThat(page.locator("#asks .row").first()).isVisible()
         assertThat(page.locator("#st-bid")).not().hasText("—")
-        assertThat(page.locator("#price")).hasValue(page.locator("#st-bid").textContent())
+        assertThat(page.locator("#price")).hasValue(checkNotNull(page.locator("#st-bid").textContent()))
         assertThat(page.locator("#tape")).hasText("no trades yet")
     }
 
@@ -110,7 +110,7 @@ class OrderBookBrowserTest {
     fun `a sell at the best bid fills, and the fill reaches the tape and the last price`() {
         val page = open()
         live(page)
-        val bestBid = page.locator("#st-bid").textContent()
+        val bestBid = checkNotNull(page.locator("#st-bid").textContent())
 
         page.locator("#sell").click()
         assertThat(page.locator("#sell")).hasAttribute("aria-pressed", "true")
