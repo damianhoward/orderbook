@@ -21,7 +21,7 @@ application {
 dependencies {
     implementation project(':core')
     // Real instrument quotes to seed and label the live book — see QuoteSeed.
-    implementation 'com.damianhoward:market-data:2.0.2'
+    implementation 'com.damianhoward:market-data:2.0.3'
     // Egress only — Kafka attaches at the edge (KafkaMarketEgress), never the match path.
     implementation deps.kafka.clients
     implementation deps.kotlinx.serialization.json
