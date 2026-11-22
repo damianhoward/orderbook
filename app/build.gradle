@@ -7,6 +7,7 @@ plugins {
     // No version: the platform's Kotlin Gradle plugin brings the matching compiler plugin.
     id 'org.jetbrains.kotlin.plugin.serialization'
     id 'application'
+    id 'com.damianhoward.runtime-image'
     id 'me.champeau.jmh' // MarketSessionBenchmark lives here: it measures submit() with the egress attached
 }
 
@@ -60,4 +61,11 @@ jmh {
     profilers = ['gc']
     resultFormat = 'JSON'
     resultsFile = project.file("${buildDir}/reports/jmh/results.json")
+}
+
+// The release carries its own runtime (build-conventions' runtime-image), which the launcher prefers
+// over the unit's JAVA_HOME. Kafka egress is off without KAFKA_BOOTSTRAP_SERVERS, so CI starts the
+// site on the image; /readyz reports the quote source, an upstream CI does not call, so it stays out.
+runtimeImage {
+    smokePaths = ['/', '/metrics', '/privacy']
 }
